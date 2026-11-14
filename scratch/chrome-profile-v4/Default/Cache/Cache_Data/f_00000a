@@ -1,0 +1,249 @@
+export const loveStoryVertexShader = `
+uniform float uTime;
+uniform float uRevealProgress;
+uniform float uOfferProgress;
+uniform float uDissolveProgress;
+uniform float uFreeze;
+uniform float uAlpha;
+uniform float uPixelRatio;
+
+attribute vec3 aPositionInitial;
+attribute vec3 aPositionRest;
+attribute vec3 aPositionTouch;
+attribute float aPartType;    // 0: Rose, 1: Stem, 2: Hand, 3: Man, 4: Girl, 5: Ambient
+attribute float aRevealOrder; // 0.0 to 1.0
+attribute float aSize;
+attribute float aColorT;
+attribute float aRandom;
+
+varying float vPartType;
+varying float vColorT;
+varying float vRandom;
+varying float vAlpha;
+
+// Simplex Noise 3D
+vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
+vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+
+float snoise(vec3 v) {
+  const vec2 C = vec2(1.0/6.0, 1.0/3.0);
+  const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+  vec3 i  = floor(v + dot(v, C.yyy));
+  vec3 x0 = v - i + dot(i, C.xxx);
+  vec3 g = step(x0.yzx, x0.xyz);
+  vec3 l = 1.0 - g;
+  vec3 i1 = min(g.xyz, l.zxy);
+  vec3 i2 = max(g.xyz, l.zxy);
+  vec3 x1 = x0 - i1 + C.xxx;
+  vec3 x2 = x0 - i2 + C.yyy;
+  vec3 x3 = x0 - D.yyy;
+  i = mod289(i);
+  vec4 p = permute(permute(permute(
+             i.z + vec4(0.0, i1.z, i2.z, 1.0))
+           + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+           + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+  float n_ = 0.142857142857;
+  vec3 ns = n_ * D.wyz - D.xzx;
+  vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+  vec4 x_ = floor(j * ns.z);
+  vec4 y_ = floor(j - 7.0 * x_);
+  vec4 x = x_ *ns.x + ns.yyyy;
+  vec4 y = y_ *ns.x + ns.yyyy;
+  vec4 h = 1.0 - abs(x) - abs(y);
+  vec4 b0 = vec4(x.xy, y.xy);
+  vec4 b1 = vec4(x.zw, y.zw);
+  vec4 s0 = floor(b0)*2.0 + 1.0;
+  vec4 s1 = floor(b1)*2.0 + 1.0;
+  vec4 sh = -step(h, vec4(0.0));
+  vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy;
+  vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
+  vec3 p0 = vec3(a0.xy, h.x);
+  vec3 p1 = vec3(a0.zw, h.y);
+  vec3 p2 = vec3(a1.xy, h.z);
+  vec3 p3 = vec3(a1.zw, h.w);
+  vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));
+  p0 *= norm.x;
+  p1 *= norm.y;
+  p2 *= norm.z;
+  p3 *= norm.w;
+  vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+  m = m * m;
+  return 42.0 * dot(m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
+}
+
+vec3 curlNoise(vec3 p) {
+  const float e = 0.08;
+  float n1 = snoise(vec3(p.x, p.y + e, p.z));
+  float n2 = snoise(vec3(p.x, p.y - e, p.z));
+  float n3 = snoise(vec3(p.x, p.y, p.z + e));
+  float n4 = snoise(vec3(p.x, p.y, p.z - e));
+  float n5 = snoise(vec3(p.x + e, p.y, p.z));
+  float n6 = snoise(vec3(p.x - e, p.y, p.z));
+  float x = (n3 - n4) - (n1 - n2);
+  float y = (n5 - n6) - (n3 - n4);
+  float z = (n1 - n2) - (n5 - n6);
+  return normalize(vec3(x, y, z));
+}
+
+void main() {
+  vPartType = aPartType;
+  vColorT = aColorT;
+  vRandom = aRandom;
+
+  float effectiveTime = (uFreeze > 0.5) ? 0.0 : uTime;
+
+  // 1. Calculate Target Pose based on Offering/Touching Progress
+  vec3 targetPose = mix(aPositionRest, aPositionTouch, smoothstep(0.0, 1.0, uOfferProgress));
+
+  // 2. Calculate Sequential Materialization (From cosmic scatter to target pose)
+  float revealDelta = uRevealProgress - aRevealOrder;
+  float formProgress = smoothstep(0.0, 0.08, revealDelta);
+
+  // If particle has not begun forming yet, keep it unformed
+  vec3 pos = mix(aPositionInitial, targetPose, formProgress);
+
+  // Add organic swirl turbulence during materialization
+  if (formProgress < 0.99 && formProgress > 0.01) {
+    vec3 curl = curlNoise(pos * 1.1 + vec3(effectiveTime * 0.15, aRandom * 2.0, 0.0));
+    pos += curl * ((1.0 - formProgress) * 0.28);
+  }
+
+  // Particle Opacity
+  float particleAlpha = formProgress;
+
+  // 3. Subtle Living Breathing Harmonic Motion (when fully formed and not frozen)
+  if (formProgress >= 0.99 && uFreeze < 0.5 && uDissolveProgress < 0.01) {
+    vec2 breath = vec2(
+      sin(effectiveTime * 1.2 + targetPose.y * 2.5),
+      cos(effectiveTime * 1.4 + targetPose.x * 2.5)
+    ) * 0.0025;
+    pos.xy += breath;
+  }
+
+  // 4. Scene Seven: Dissolution into thousands of floating particles
+  if (uDissolveProgress > 0.001) {
+    vec3 curl = curlNoise(pos * 0.85 + vec3(effectiveTime * 0.2, aRandom * 4.0, effectiveTime * 0.1));
+    float dist = pow(uDissolveProgress, 1.5);
+    pos += curl * (dist * 3.2);
+    pos.y += pow(uDissolveProgress, 1.3) * 0.6; // Gentle romantic upward drift
+    pos.z += (aRandom - 0.5) * pow(uDissolveProgress, 1.2) * 2.0;
+
+    // Fade out as dissolve progresses
+    particleAlpha *= (1.0 - smoothstep(0.15, 0.95, uDissolveProgress));
+  }
+
+  vAlpha = particleAlpha;
+
+  vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+  gl_Position = projectionMatrix * mvPosition;
+
+  // Particle Point Sizing with subtle twinkle
+  float twinkle = (uFreeze > 0.5) ? 1.0 : (1.0 + 0.25 * sin(effectiveTime * 3.8 + aRandom * 6.28318));
+  float baseScale = (aPartType == 0.0) ? 1.25 : 1.05; // Rose slightly crisper
+  float pSize = aSize * baseScale * uPixelRatio * twinkle * (11.0 / -mvPosition.z);
+  gl_PointSize = clamp(pSize, 1.0, 3.8);
+}
+`;
+export const loveStoryFragmentShader = `
+uniform float uTime;
+uniform float uFreeze;
+uniform float uAlpha;
+uniform float uDissolveProgress;
+
+varying float vPartType;
+varying float vColorT;
+varying float vRandom;
+varying float vAlpha;
+
+void main() {
+  if (vAlpha <= 0.005) discard;
+
+  // Anti-aliased circular disc
+  vec2 coord = gl_PointCoord - vec2(0.5);
+  float dist = length(coord);
+  if (dist > 0.5) discard;
+
+  float core = smoothstep(0.5, 0.08, dist);
+
+  float effectiveTime = (uFreeze > 0.5) ? 0.0 : uTime;
+  float twinkle = (uFreeze > 0.5) ? 1.0 : (0.82 + 0.32 * sin(effectiveTime * 4.2 + vRandom * 6.28318));
+
+  vec3 color;
+
+  if (vPartType < 0.5) {
+    // -------------------------------------------------------------
+    // THE RED ROSE BLOSSOM (partType = 0)
+    // Deep romantic crimson velvet core, rich ruby, soft rose petal tips
+    // -------------------------------------------------------------
+    vec3 deepCrimson = vec3(0.68, 0.03, 0.14); // #ad0824
+    vec3 brightRuby  = vec3(0.94, 0.07, 0.24); // #f0123d
+    vec3 softRoseTip = vec3(0.99, 0.58, 0.70); // #fd94b3
+
+    if (vColorT < 0.45) {
+      color = mix(deepCrimson, brightRuby, vColorT / 0.45);
+    } else {
+      color = mix(brightRuby, softRoseTip, (vColorT - 0.45) / 0.55);
+    }
+  } else if (vPartType < 1.5) {
+    // -------------------------------------------------------------
+    // THE ROSE STEM, THORNS & LEAVES (partType = 1)
+    // Deep garnet, dark wine red, burgundy, subtle rose highlights (NO GREEN)
+    // -------------------------------------------------------------
+    vec3 deepGarnet = vec3(0.38, 0.03, 0.09); // #610817
+    vec3 wineRed    = vec3(0.58, 0.06, 0.16); // #940f29
+    vec3 stemAccent = vec3(0.85, 0.35, 0.48); // #d9597a
+    color = mix(deepGarnet, wineRed, vColorT);
+    if (vRandom > 0.75) {
+      color = mix(color, stemAccent, 0.4);
+    }
+  } else if (vPartType < 2.5) {
+    // -------------------------------------------------------------
+    // THE HAND WRAPPING THE STEM (partType = 2)
+    // Soft blush pink with warm white highlights
+    // -------------------------------------------------------------
+    vec3 blushPink = vec3(0.96, 0.50, 0.69); // #f580b0
+    vec3 warmWhite = vec3(1.0, 0.94, 0.96);
+    color = mix(blushPink, warmWhite, vColorT * 0.38);
+  } else if (vPartType < 3.5) {
+    // -------------------------------------------------------------
+    // THE KNEELING PERSON (MAN) (partType = 3)
+    // Blush pink, soft rose, dusty pink, subtle lavender
+    // -------------------------------------------------------------
+    vec3 dustyRose  = vec3(0.92, 0.44, 0.60); // #eb7099
+    vec3 softBlush  = vec3(0.98, 0.60, 0.78); // #fa9ac7
+    vec3 paleAccent = vec3(0.88, 0.70, 0.96); // Subtle lavender
+    color = mix(dustyRose, softBlush, vColorT);
+    if (vRandom > 0.80) {
+      color = mix(color, paleAccent, 0.35);
+    }
+  } else if (vPartType < 4.5) {
+    // -------------------------------------------------------------
+    // THE STANDING GIRL (partType = 4)
+    // Delicate blush pink, luminous petal pink, ethereal highlights
+    // -------------------------------------------------------------
+    vec3 petalPink     = vec3(0.99, 0.64, 0.80); // #fda3cc
+    vec3 etherealBlush = vec3(0.98, 0.80, 0.90); // #facce6
+    vec3 lavenderHint  = vec3(0.90, 0.74, 0.97); // #e6bcf7
+    color = mix(petalPink, etherealBlush, vColorT);
+    if (vRandom > 0.75) {
+      color = mix(color, lavenderHint, 0.32);
+    }
+  } else {
+    // -------------------------------------------------------------
+    // AMBIENT DRIFTING STARDUST (partType = 5)
+    // -------------------------------------------------------------
+    vec3 ambientPink = vec3(0.98, 0.68, 0.84);
+    vec3 ambientGlow = vec3(0.95, 0.85, 0.98);
+    color = mix(ambientPink, ambientGlow, vColorT);
+  }
+
+  vec3 finalColor = color * twinkle;
+  float alpha = core * vAlpha * uAlpha * 0.34;
+
+  gl_FragColor = vec4(finalColor, alpha);
+}
+`;
+
+//# sourceMappingURL=data:application/json;base64,eyJtYXBwaW5ncyI6IkFBQUEsT0FBTyxNQUFNLHdCQUFtQzs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7OztBQXFKaEQsT0FBTyxNQUFNLDBCQUFxQyIsIm5hbWVzIjpbXSwic291cmNlcyI6WyJsb3ZlU3RvcnlTaGFkZXJzLmpzIl0sInZlcnNpb24iOjMsInNvdXJjZXNDb250ZW50IjpbImV4cG9ydCBjb25zdCBsb3ZlU3RvcnlWZXJ0ZXhTaGFkZXIgPSAvKiBnbHNsICovIGBcbnVuaWZvcm0gZmxvYXQgdVRpbWU7XG51bmlmb3JtIGZsb2F0IHVSZXZlYWxQcm9ncmVzcztcbnVuaWZvcm0gZmxvYXQgdU9mZmVyUHJvZ3Jlc3M7XG51bmlmb3JtIGZsb2F0IHVEaXNzb2x2ZVByb2dyZXNzO1xudW5pZm9ybSBmbG9hdCB1RnJlZXplO1xudW5pZm9ybSBmbG9hdCB1QWxwaGE7XG51bmlmb3JtIGZsb2F0IHVQaXhlbFJhdGlvO1xuXG5hdHRyaWJ1dGUgdmVjMyBhUG9zaXRpb25Jbml0aWFsO1xuYXR0cmlidXRlIHZlYzMgYVBvc2l0aW9uUmVzdDtcbmF0dHJpYnV0ZSB2ZWMzIGFQb3NpdGlvblRvdWNoO1xuYXR0cmlidXRlIGZsb2F0IGFQYXJ0VHlwZTsgICAgLy8gMDogUm9zZSwgMTogU3RlbSwgMjogSGFuZCwgMzogTWFuLCA0OiBHaXJsLCA1OiBBbWJpZW50XG5hdHRyaWJ1dGUgZmxvYXQgYVJldmVhbE9yZGVyOyAvLyAwLjAgdG8gMS4wXG5hdHRyaWJ1dGUgZmxvYXQgYVNpemU7XG5hdHRyaWJ1dGUgZmxvYXQgYUNvbG9yVDtcbmF0dHJpYnV0ZSBmbG9hdCBhUmFuZG9tO1xuXG52YXJ5aW5nIGZsb2F0IHZQYXJ0VHlwZTtcbnZhcnlpbmcgZmxvYXQgdkNvbG9yVDtcbnZhcnlpbmcgZmxvYXQgdlJhbmRvbTtcbnZhcnlpbmcgZmxvYXQgdkFscGhhO1xuXG4vLyBTaW1wbGV4IE5vaXNlIDNEXG52ZWMzIG1vZDI4OSh2ZWMzIHgpIHsgcmV0dXJuIHggLSBmbG9vcih4ICogKDEuMCAvIDI4OS4wKSkgKiAyODkuMDsgfVxudmVjNCBtb2QyODkodmVjNCB4KSB7IHJldHVybiB4IC0gZmxvb3IoeCAqICgxLjAgLyAyODkuMCkpICogMjg5LjA7IH1cbnZlYzQgcGVybXV0ZSh2ZWM0IHgpIHsgcmV0dXJuIG1vZDI4OSgoKHgqMzQuMCkrMS4wKSp4KTsgfVxudmVjNCB0YXlsb3JJbnZTcXJ0KHZlYzQgcikgeyByZXR1cm4gMS43OTI4NDI5MTQwMDE1OSAtIDAuODUzNzM0NzIwOTUzMTQgKiByOyB9XG5cbmZsb2F0IHNub2lzZSh2ZWMzIHYpIHtcbiAgY29uc3QgdmVjMiBDID0gdmVjMigxLjAvNi4wLCAxLjAvMy4wKTtcbiAgY29uc3QgdmVjNCBEID0gdmVjNCgwLjAsIDAuNSwgMS4wLCAyLjApO1xuICB2ZWMzIGkgID0gZmxvb3IodiArIGRvdCh2LCBDLnl5eSkpO1xuICB2ZWMzIHgwID0gdiAtIGkgKyBkb3QoaSwgQy54eHgpO1xuICB2ZWMzIGcgPSBzdGVwKHgwLnl6eCwgeDAueHl6KTtcbiAgdmVjMyBsID0gMS4wIC0gZztcbiAgdmVjMyBpMSA9IG1pbihnLnh5eiwgbC56eHkpO1xuICB2ZWMzIGkyID0gbWF4KGcueHl6LCBsLnp4eSk7XG4gIHZlYzMgeDEgPSB4MCAtIGkxICsgQy54eHg7XG4gIHZlYzMgeDIgPSB4MCAtIGkyICsgQy55eXk7XG4gIHZlYzMgeDMgPSB4MCAtIEQueXl5O1xuICBpID0gbW9kMjg5KGkpO1xuICB2ZWM0IHAgPSBwZXJtdXRlKHBlcm11dGUocGVybXV0ZShcbiAgICAgICAgICAgICBpLnogKyB2ZWM0KDAuMCwgaTEueiwgaTIueiwgMS4wKSlcbiAgICAgICAgICAgKyBpLnkgKyB2ZWM0KDAuMCwgaTEueSwgaTIueSwgMS4wKSlcbiAgICAgICAgICAgKyBpLnggKyB2ZWM0KDAuMCwgaTEueCwgaTIueCwgMS4wKSk7XG4gIGZsb2F0IG5fID0gMC4xNDI4NTcxNDI4NTc7XG4gIHZlYzMgbnMgPSBuXyAqIEQud3l6IC0gRC54eng7XG4gIHZlYzQgaiA9IHAgLSA0OS4wICogZmxvb3IocCAqIG5zLnogKiBucy56KTtcbiAgdmVjNCB4XyA9IGZsb29yKGogKiBucy56KTtcbiAgdmVjNCB5XyA9IGZsb29yKGogLSA3LjAgKiB4Xyk7XG4gIHZlYzQgeCA9IHhfICpucy54ICsgbnMueXl5eTtcbiAgdmVjNCB5ID0geV8gKm5zLnggKyBucy55eXl5O1xuICB2ZWM0IGggPSAxLjAgLSBhYnMoeCkgLSBhYnMoeSk7XG4gIHZlYzQgYjAgPSB2ZWM0KHgueHksIHkueHkpO1xuICB2ZWM0IGIxID0gdmVjNCh4Lnp3LCB5Lnp3KTtcbiAgdmVjNCBzMCA9IGZsb29yKGIwKSoyLjAgKyAxLjA7XG4gIHZlYzQgczEgPSBmbG9vcihiMSkqMi4wICsgMS4wO1xuICB2ZWM0IHNoID0gLXN0ZXAoaCwgdmVjNCgwLjApKTtcbiAgdmVjNCBhMCA9IGIwLnh6eXcgKyBzMC54enl3KnNoLnh4eXk7XG4gIHZlYzQgYTEgPSBiMS54enl3ICsgczEueHp5dypzaC56end3O1xuICB2ZWMzIHAwID0gdmVjMyhhMC54eSwgaC54KTtcbiAgdmVjMyBwMSA9IHZlYzMoYTAuencsIGgueSk7XG4gIHZlYzMgcDIgPSB2ZWMzKGExLnh5LCBoLnopO1xuICB2ZWMzIHAzID0gdmVjMyhhMS56dywgaC53KTtcbiAgdmVjNCBub3JtID0gdGF5bG9ySW52U3FydCh2ZWM0KGRvdChwMCxwMCksIGRvdChwMSxwMSksIGRvdChwMiwgcDIpLCBkb3QocDMscDMpKSk7XG4gIHAwICo9IG5vcm0ueDtcbiAgcDEgKj0gbm9ybS55O1xuICBwMiAqPSBub3JtLno7XG4gIHAzICo9IG5vcm0udztcbiAgdmVjNCBtID0gbWF4KDAuNiAtIHZlYzQoZG90KHgwLHgwKSwgZG90KHgxLHgxKSwgZG90KHgyLHgyKSwgZG90KHgzLHgzKSksIDAuMCk7XG4gIG0gPSBtICogbTtcbiAgcmV0dXJuIDQyLjAgKiBkb3QobSptLCB2ZWM0KGRvdChwMCx4MCksIGRvdChwMSx4MSksIGRvdChwMix4MiksIGRvdChwMyx4MykpKTtcbn1cblxudmVjMyBjdXJsTm9pc2UodmVjMyBwKSB7XG4gIGNvbnN0IGZsb2F0IGUgPSAwLjA4O1xuICBmbG9hdCBuMSA9IHNub2lzZSh2ZWMzKHAueCwgcC55ICsgZSwgcC56KSk7XG4gIGZsb2F0IG4yID0gc25vaXNlKHZlYzMocC54LCBwLnkgLSBlLCBwLnopKTtcbiAgZmxvYXQgbjMgPSBzbm9pc2UodmVjMyhwLngsIHAueSwgcC56ICsgZSkpO1xuICBmbG9hdCBuNCA9IHNub2lzZSh2ZWMzKHAueCwgcC55LCBwLnogLSBlKSk7XG4gIGZsb2F0IG41ID0gc25vaXNlKHZlYzMocC54ICsgZSwgcC55LCBwLnopKTtcbiAgZmxvYXQgbjYgPSBzbm9pc2UodmVjMyhwLnggLSBlLCBwLnksIHAueikpO1xuICBmbG9hdCB4ID0gKG4zIC0gbjQpIC0gKG4xIC0gbjIpO1xuICBmbG9hdCB5ID0gKG41IC0gbjYpIC0gKG4zIC0gbjQpO1xuICBmbG9hdCB6ID0gKG4xIC0gbjIpIC0gKG41IC0gbjYpO1xuICByZXR1cm4gbm9ybWFsaXplKHZlYzMoeCwgeSwgeikpO1xufVxuXG52b2lkIG1haW4oKSB7XG4gIHZQYXJ0VHlwZSA9IGFQYXJ0VHlwZTtcbiAgdkNvbG9yVCA9IGFDb2xvclQ7XG4gIHZSYW5kb20gPSBhUmFuZG9tO1xuXG4gIGZsb2F0IGVmZmVjdGl2ZVRpbWUgPSAodUZyZWV6ZSA+IDAuNSkgPyAwLjAgOiB1VGltZTtcblxuICAvLyAxLiBDYWxjdWxhdGUgVGFyZ2V0IFBvc2UgYmFzZWQgb24gT2ZmZXJpbmcvVG91Y2hpbmcgUHJvZ3Jlc3NcbiAgdmVjMyB0YXJnZXRQb3NlID0gbWl4KGFQb3NpdGlvblJlc3QsIGFQb3NpdGlvblRvdWNoLCBzbW9vdGhzdGVwKDAuMCwgMS4wLCB1T2ZmZXJQcm9ncmVzcykpO1xuXG4gIC8vIDIuIENhbGN1bGF0ZSBTZXF1ZW50aWFsIE1hdGVyaWFsaXphdGlvbiAoRnJvbSBjb3NtaWMgc2NhdHRlciB0byB0YXJnZXQgcG9zZSlcbiAgZmxvYXQgcmV2ZWFsRGVsdGEgPSB1UmV2ZWFsUHJvZ3Jlc3MgLSBhUmV2ZWFsT3JkZXI7XG4gIGZsb2F0IGZvcm1Qcm9ncmVzcyA9IHNtb290aHN0ZXAoMC4wLCAwLjA4LCByZXZlYWxEZWx0YSk7XG5cbiAgLy8gSWYgcGFydGljbGUgaGFzIG5vdCBiZWd1biBmb3JtaW5nIHlldCwga2VlcCBpdCB1bmZvcm1lZFxuICB2ZWMzIHBvcyA9IG1peChhUG9zaXRpb25Jbml0aWFsLCB0YXJnZXRQb3NlLCBmb3JtUHJvZ3Jlc3MpO1xuXG4gIC8vIEFkZCBvcmdhbmljIHN3aXJsIHR1cmJ1bGVuY2UgZHVyaW5nIG1hdGVyaWFsaXphdGlvblxuICBpZiAoZm9ybVByb2dyZXNzIDwgMC45OSAmJiBmb3JtUHJvZ3Jlc3MgPiAwLjAxKSB7XG4gICAgdmVjMyBjdXJsID0gY3VybE5vaXNlKHBvcyAqIDEuMSArIHZlYzMoZWZmZWN0aXZlVGltZSAqIDAuMTUsIGFSYW5kb20gKiAyLjAsIDAuMCkpO1xuICAgIHBvcyArPSBjdXJsICogKCgxLjAgLSBmb3JtUHJvZ3Jlc3MpICogMC4yOCk7XG4gIH1cblxuICAvLyBQYXJ0aWNsZSBPcGFjaXR5XG4gIGZsb2F0IHBhcnRpY2xlQWxwaGEgPSBmb3JtUHJvZ3Jlc3M7XG5cbiAgLy8gMy4gU3VidGxlIExpdmluZyBCcmVhdGhpbmcgSGFybW9uaWMgTW90aW9uICh3aGVuIGZ1bGx5IGZvcm1lZCBhbmQgbm90IGZyb3plbilcbiAgaWYgKGZvcm1Qcm9ncmVzcyA+PSAwLjk5ICYmIHVGcmVlemUgPCAwLjUgJiYgdURpc3NvbHZlUHJvZ3Jlc3MgPCAwLjAxKSB7XG4gICAgdmVjMiBicmVhdGggPSB2ZWMyKFxuICAgICAgc2luKGVmZmVjdGl2ZVRpbWUgKiAxLjIgKyB0YXJnZXRQb3NlLnkgKiAyLjUpLFxuICAgICAgY29zKGVmZmVjdGl2ZVRpbWUgKiAxLjQgKyB0YXJnZXRQb3NlLnggKiAyLjUpXG4gICAgKSAqIDAuMDAyNTtcbiAgICBwb3MueHkgKz0gYnJlYXRoO1xuICB9XG5cbiAgLy8gNC4gU2NlbmUgU2V2ZW46IERpc3NvbHV0aW9uIGludG8gdGhvdXNhbmRzIG9mIGZsb2F0aW5nIHBhcnRpY2xlc1xuICBpZiAodURpc3NvbHZlUHJvZ3Jlc3MgPiAwLjAwMSkge1xuICAgIHZlYzMgY3VybCA9IGN1cmxOb2lzZShwb3MgKiAwLjg1ICsgdmVjMyhlZmZlY3RpdmVUaW1lICogMC4yLCBhUmFuZG9tICogNC4wLCBlZmZlY3RpdmVUaW1lICogMC4xKSk7XG4gICAgZmxvYXQgZGlzdCA9IHBvdyh1RGlzc29sdmVQcm9ncmVzcywgMS41KTtcbiAgICBwb3MgKz0gY3VybCAqIChkaXN0ICogMy4yKTtcbiAgICBwb3MueSArPSBwb3codURpc3NvbHZlUHJvZ3Jlc3MsIDEuMykgKiAwLjY7IC8vIEdlbnRsZSByb21hbnRpYyB1cHdhcmQgZHJpZnRcbiAgICBwb3MueiArPSAoYVJhbmRvbSAtIDAuNSkgKiBwb3codURpc3NvbHZlUHJvZ3Jlc3MsIDEuMikgKiAyLjA7XG5cbiAgICAvLyBGYWRlIG91dCBhcyBkaXNzb2x2ZSBwcm9ncmVzc2VzXG4gICAgcGFydGljbGVBbHBoYSAqPSAoMS4wIC0gc21vb3Roc3RlcCgwLjE1LCAwLjk1LCB1RGlzc29sdmVQcm9ncmVzcykpO1xuICB9XG5cbiAgdkFscGhhID0gcGFydGljbGVBbHBoYTtcblxuICB2ZWM0IG12UG9zaXRpb24gPSBtb2RlbFZpZXdNYXRyaXggKiB2ZWM0KHBvcywgMS4wKTtcbiAgZ2xfUG9zaXRpb24gPSBwcm9qZWN0aW9uTWF0cml4ICogbXZQb3NpdGlvbjtcblxuICAvLyBQYXJ0aWNsZSBQb2ludCBTaXppbmcgd2l0aCBzdWJ0bGUgdHdpbmtsZVxuICBmbG9hdCB0d2lua2xlID0gKHVGcmVlemUgPiAwLjUpID8gMS4wIDogKDEuMCArIDAuMjUgKiBzaW4oZWZmZWN0aXZlVGltZSAqIDMuOCArIGFSYW5kb20gKiA2LjI4MzE4KSk7XG4gIGZsb2F0IGJhc2VTY2FsZSA9IChhUGFydFR5cGUgPT0gMC4wKSA/IDEuMjUgOiAxLjA1OyAvLyBSb3NlIHNsaWdodGx5IGNyaXNwZXJcbiAgZmxvYXQgcFNpemUgPSBhU2l6ZSAqIGJhc2VTY2FsZSAqIHVQaXhlbFJhdGlvICogdHdpbmtsZSAqICgxMS4wIC8gLW12UG9zaXRpb24ueik7XG4gIGdsX1BvaW50U2l6ZSA9IGNsYW1wKHBTaXplLCAxLjAsIDMuOCk7XG59XG5gO1xuXG5leHBvcnQgY29uc3QgbG92ZVN0b3J5RnJhZ21lbnRTaGFkZXIgPSAvKiBnbHNsICovIGBcbnVuaWZvcm0gZmxvYXQgdVRpbWU7XG51bmlmb3JtIGZsb2F0IHVGcmVlemU7XG51bmlmb3JtIGZsb2F0IHVBbHBoYTtcbnVuaWZvcm0gZmxvYXQgdURpc3NvbHZlUHJvZ3Jlc3M7XG5cbnZhcnlpbmcgZmxvYXQgdlBhcnRUeXBlO1xudmFyeWluZyBmbG9hdCB2Q29sb3JUO1xudmFyeWluZyBmbG9hdCB2UmFuZG9tO1xudmFyeWluZyBmbG9hdCB2QWxwaGE7XG5cbnZvaWQgbWFpbigpIHtcbiAgaWYgKHZBbHBoYSA8PSAwLjAwNSkgZGlzY2FyZDtcblxuICAvLyBBbnRpLWFsaWFzZWQgY2lyY3VsYXIgZGlzY1xuICB2ZWMyIGNvb3JkID0gZ2xfUG9pbnRDb29yZCAtIHZlYzIoMC41KTtcbiAgZmxvYXQgZGlzdCA9IGxlbmd0aChjb29yZCk7XG4gIGlmIChkaXN0ID4gMC41KSBkaXNjYXJkO1xuXG4gIGZsb2F0IGNvcmUgPSBzbW9vdGhzdGVwKDAuNSwgMC4wOCwgZGlzdCk7XG5cbiAgZmxvYXQgZWZmZWN0aXZlVGltZSA9ICh1RnJlZXplID4gMC41KSA/IDAuMCA6IHVUaW1lO1xuICBmbG9hdCB0d2lua2xlID0gKHVGcmVlemUgPiAwLjUpID8gMS4wIDogKDAuODIgKyAwLjMyICogc2luKGVmZmVjdGl2ZVRpbWUgKiA0LjIgKyB2UmFuZG9tICogNi4yODMxOCkpO1xuXG4gIHZlYzMgY29sb3I7XG5cbiAgaWYgKHZQYXJ0VHlwZSA8IDAuNSkge1xuICAgIC8vIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS1cbiAgICAvLyBUSEUgUkVEIFJPU0UgQkxPU1NPTSAocGFydFR5cGUgPSAwKVxuICAgIC8vIERlZXAgcm9tYW50aWMgY3JpbXNvbiB2ZWx2ZXQgY29yZSwgcmljaCBydWJ5LCBzb2Z0IHJvc2UgcGV0YWwgdGlwc1xuICAgIC8vIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS1cbiAgICB2ZWMzIGRlZXBDcmltc29uID0gdmVjMygwLjY4LCAwLjAzLCAwLjE0KTsgLy8gI2FkMDgyNFxuICAgIHZlYzMgYnJpZ2h0UnVieSAgPSB2ZWMzKDAuOTQsIDAuMDcsIDAuMjQpOyAvLyAjZjAxMjNkXG4gICAgdmVjMyBzb2Z0Um9zZVRpcCA9IHZlYzMoMC45OSwgMC41OCwgMC43MCk7IC8vICNmZDk0YjNcblxuICAgIGlmICh2Q29sb3JUIDwgMC40NSkge1xuICAgICAgY29sb3IgPSBtaXgoZGVlcENyaW1zb24sIGJyaWdodFJ1YnksIHZDb2xvclQgLyAwLjQ1KTtcbiAgICB9IGVsc2Uge1xuICAgICAgY29sb3IgPSBtaXgoYnJpZ2h0UnVieSwgc29mdFJvc2VUaXAsICh2Q29sb3JUIC0gMC40NSkgLyAwLjU1KTtcbiAgICB9XG4gIH0gZWxzZSBpZiAodlBhcnRUeXBlIDwgMS41KSB7XG4gICAgLy8gLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLVxuICAgIC8vIFRIRSBST1NFIFNURU0sIFRIT1JOUyAmIExFQVZFUyAocGFydFR5cGUgPSAxKVxuICAgIC8vIERlZXAgZ2FybmV0LCBkYXJrIHdpbmUgcmVkLCBidXJndW5keSwgc3VidGxlIHJvc2UgaGlnaGxpZ2h0cyAoTk8gR1JFRU4pXG4gICAgLy8gLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLVxuICAgIHZlYzMgZGVlcEdhcm5ldCA9IHZlYzMoMC4zOCwgMC4wMywgMC4wOSk7IC8vICM2MTA4MTdcbiAgICB2ZWMzIHdpbmVSZWQgICAgPSB2ZWMzKDAuNTgsIDAuMDYsIDAuMTYpOyAvLyAjOTQwZjI5XG4gICAgdmVjMyBzdGVtQWNjZW50ID0gdmVjMygwLjg1LCAwLjM1LCAwLjQ4KTsgLy8gI2Q5NTk3YVxuICAgIGNvbG9yID0gbWl4KGRlZXBHYXJuZXQsIHdpbmVSZWQsIHZDb2xvclQpO1xuICAgIGlmICh2UmFuZG9tID4gMC43NSkge1xuICAgICAgY29sb3IgPSBtaXgoY29sb3IsIHN0ZW1BY2NlbnQsIDAuNCk7XG4gICAgfVxuICB9IGVsc2UgaWYgKHZQYXJ0VHlwZSA8IDIuNSkge1xuICAgIC8vIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS1cbiAgICAvLyBUSEUgSEFORCBXUkFQUElORyBUSEUgU1RFTSAocGFydFR5cGUgPSAyKVxuICAgIC8vIFNvZnQgYmx1c2ggcGluayB3aXRoIHdhcm0gd2hpdGUgaGlnaGxpZ2h0c1xuICAgIC8vIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS1cbiAgICB2ZWMzIGJsdXNoUGluayA9IHZlYzMoMC45NiwgMC41MCwgMC42OSk7IC8vICNmNTgwYjBcbiAgICB2ZWMzIHdhcm1XaGl0ZSA9IHZlYzMoMS4wLCAwLjk0LCAwLjk2KTtcbiAgICBjb2xvciA9IG1peChibHVzaFBpbmssIHdhcm1XaGl0ZSwgdkNvbG9yVCAqIDAuMzgpO1xuICB9IGVsc2UgaWYgKHZQYXJ0VHlwZSA8IDMuNSkge1xuICAgIC8vIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS1cbiAgICAvLyBUSEUgS05FRUxJTkcgUEVSU09OIChNQU4pIChwYXJ0VHlwZSA9IDMpXG4gICAgLy8gQmx1c2ggcGluaywgc29mdCByb3NlLCBkdXN0eSBwaW5rLCBzdWJ0bGUgbGF2ZW5kZXJcbiAgICAvLyAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tXG4gICAgdmVjMyBkdXN0eVJvc2UgID0gdmVjMygwLjkyLCAwLjQ0LCAwLjYwKTsgLy8gI2ViNzA5OVxuICAgIHZlYzMgc29mdEJsdXNoICA9IHZlYzMoMC45OCwgMC42MCwgMC43OCk7IC8vICNmYTlhYzdcbiAgICB2ZWMzIHBhbGVBY2NlbnQgPSB2ZWMzKDAuODgsIDAuNzAsIDAuOTYpOyAvLyBTdWJ0bGUgbGF2ZW5kZXJcbiAgICBjb2xvciA9IG1peChkdXN0eVJvc2UsIHNvZnRCbHVzaCwgdkNvbG9yVCk7XG4gICAgaWYgKHZSYW5kb20gPiAwLjgwKSB7XG4gICAgICBjb2xvciA9IG1peChjb2xvciwgcGFsZUFjY2VudCwgMC4zNSk7XG4gICAgfVxuICB9IGVsc2UgaWYgKHZQYXJ0VHlwZSA8IDQuNSkge1xuICAgIC8vIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS1cbiAgICAvLyBUSEUgU1RBTkRJTkcgR0lSTCAocGFydFR5cGUgPSA0KVxuICAgIC8vIERlbGljYXRlIGJsdXNoIHBpbmssIGx1bWlub3VzIHBldGFsIHBpbmssIGV0aGVyZWFsIGhpZ2hsaWdodHNcbiAgICAvLyAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tXG4gICAgdmVjMyBwZXRhbFBpbmsgICAgID0gdmVjMygwLjk5LCAwLjY0LCAwLjgwKTsgLy8gI2ZkYTNjY1xuICAgIHZlYzMgZXRoZXJlYWxCbHVzaCA9IHZlYzMoMC45OCwgMC44MCwgMC45MCk7IC8vICNmYWNjZTZcbiAgICB2ZWMzIGxhdmVuZGVySGludCAgPSB2ZWMzKDAuOTAsIDAuNzQsIDAuOTcpOyAvLyAjZTZiY2Y3XG4gICAgY29sb3IgPSBtaXgocGV0YWxQaW5rLCBldGhlcmVhbEJsdXNoLCB2Q29sb3JUKTtcbiAgICBpZiAodlJhbmRvbSA+IDAuNzUpIHtcbiAgICAgIGNvbG9yID0gbWl4KGNvbG9yLCBsYXZlbmRlckhpbnQsIDAuMzIpO1xuICAgIH1cbiAgfSBlbHNlIHtcbiAgICAvLyAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tXG4gICAgLy8gQU1CSUVOVCBEUklGVElORyBTVEFSRFVTVCAocGFydFR5cGUgPSA1KVxuICAgIC8vIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS1cbiAgICB2ZWMzIGFtYmllbnRQaW5rID0gdmVjMygwLjk4LCAwLjY4LCAwLjg0KTtcbiAgICB2ZWMzIGFtYmllbnRHbG93ID0gdmVjMygwLjk1LCAwLjg1LCAwLjk4KTtcbiAgICBjb2xvciA9IG1peChhbWJpZW50UGluaywgYW1iaWVudEdsb3csIHZDb2xvclQpO1xuICB9XG5cbiAgdmVjMyBmaW5hbENvbG9yID0gY29sb3IgKiB0d2lua2xlO1xuICBmbG9hdCBhbHBoYSA9IGNvcmUgKiB2QWxwaGEgKiB1QWxwaGEgKiAwLjM0O1xuXG4gIGdsX0ZyYWdDb2xvciA9IHZlYzQoZmluYWxDb2xvciwgYWxwaGEpO1xufVxuYDtcbiJdfQ==
