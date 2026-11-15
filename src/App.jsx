@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { LoveStoryExperience } from './scene/LoveStoryExperience';
 import { ParticleTextIntro } from './components/ParticleTextIntro';
+import { RomanticDedication } from './components/RomanticDedication';
 import { loadLoveStoryData } from './scene/loadLoveStory';
 
 /**
@@ -27,7 +28,7 @@ export default function App() {
   const [isMobile, setIsMobile] = useState(() => checkIsMobile());
   const [isPortrait, setIsPortrait] = useState(() => checkIsPortrait());
 
-  // Stages: 'INTRO' (mobile only) -> 'PROPOSAL'
+  // Stages: 'INTRO' (mobile only) -> 'PROPOSAL' -> 'DEDICATION'
   const [stage, setStage] = useState(() => checkIsMobile() ? 'INTRO' : 'PROPOSAL');
 
   // Preload proposal artwork binary in memory immediately on startup
@@ -72,34 +73,40 @@ export default function App() {
     setStage('PROPOSAL');
   };
 
-  // DESKTOP & LAPTOP:
-  // Bypass intro entirely. Retain exact original timing, layout, and composition untouched.
-  if (!isMobile) {
-    return (
-      <main className="fixed inset-0 w-screen h-screen bg-[#000000] overflow-hidden select-none m-0 p-0">
-        <LoveStoryExperience isMobile={false} isPortrait={false} autoPlay={true} />
-      </main>
-    );
-  }
+  // Fired when proposal animation, dissolution, and 2s black hold complete
+  const handleProposalComplete = () => {
+    setStage('DEDICATION');
+  };
 
-  // MOBILE INTRO:
-  // Render the red particle text intro in portrait orientation
-  if (stage === 'INTRO') {
-    return (
-      <main className="fixed inset-0 w-screen h-screen bg-[#000000] overflow-hidden select-none m-0 p-0">
-        <ParticleTextIntro onWaitCompleted={handleWaitCompleted} />
-      </main>
-    );
-  }
+  // Expose state and switcher for verification and testing
+  useEffect(() => {
+    window.__SET_STAGE__ = setStage;
+    window.__CURRENT_STAGE__ = stage;
+    return () => {
+      delete window.__SET_STAGE__;
+      delete window.__CURRENT_STAGE__;
+    };
+  }, [stage]);
 
-  // MOBILE PROPOSAL:
-  // Occupies 100% of the mobile viewport (fixed inset-0 w-screen h-screen bg-[#000000]).
-  // Zero CSS transforms, zero letterboxing margins, zero side panels, pure black #000000.
-  // Rotated 90 degrees clockwise in WebGL when in portrait to match the intro text animation.
-  // Rendered horizontally when in native landscape.
+  // Master Cinematic Viewport: 100% full screen, pure #000000, zero borders
   return (
     <main className="fixed inset-0 w-screen h-screen bg-[#000000] overflow-hidden select-none m-0 p-0">
-      <LoveStoryExperience isMobile={true} isPortrait={isPortrait} autoPlay={true} />
+      {isMobile && stage === 'INTRO' && (
+        <ParticleTextIntro onWaitCompleted={handleWaitCompleted} />
+      )}
+
+      {stage === 'PROPOSAL' && (
+        <LoveStoryExperience
+          isMobile={isMobile}
+          isPortrait={isPortrait}
+          autoPlay={true}
+          onProposalComplete={handleProposalComplete}
+        />
+      )}
+
+      {stage === 'DEDICATION' && (
+        <RomanticDedication isMobile={isMobile} isPortrait={isPortrait} />
+      )}
     </main>
   );
 }

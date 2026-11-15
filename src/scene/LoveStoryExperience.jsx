@@ -4,6 +4,8 @@ import * as THREE from 'three';
 import gsap from 'gsap';
 import { loadLoveStoryData } from './loadLoveStory';
 import { loveStoryVertexShader, loveStoryFragmentShader } from './loveStoryShaders';
+import { soundtrack } from '../audio/soundtrackManager';
+import { AUDIO_CONFIG } from '../config/audioConfig';
 
 function LoveStoryRendererHook({ isMobile = false, isPortrait = false }) {
   const { gl, scene, camera, size } = useThree();
@@ -51,7 +53,7 @@ function LoveStoryRendererHook({ isMobile = false, isPortrait = false }) {
   return null;
 }
 
-function LoveStoryPoints({ autoPlay = true, isMobile = false, isPortrait = false }) {
+function LoveStoryPoints({ autoPlay = true, isMobile = false, isPortrait = false, onProposalComplete }) {
   const pointsRef = useRef();
   const materialRef = useRef();
   const [data, setData] = useState(null);
@@ -65,6 +67,13 @@ function LoveStoryPoints({ autoPlay = true, isMobile = false, isPortrait = false
       .catch((err) => console.error('Error loading love story data:', err));
     return () => { isMounted = false; };
   }, []);
+
+  // Start background music when main proposal animation begins
+  useEffect(() => {
+    if (autoPlay) {
+      soundtrack.play();
+    }
+  }, [autoPlay]);
 
   const geometry = useMemo(() => {
     if (!data) return null;
@@ -130,10 +139,15 @@ function LoveStoryPoints({ autoPlay = true, isMobile = false, isPortrait = false
     };
     updateAllUniforms();
 
+    const dissolveStartTime = isMobile ? 24.25 : 25.75;
+
     const tl = gsap.timeline({
-      repeat: -1,
-      repeatDelay: 1.5,
       onUpdate: updateAllUniforms,
+      onComplete: () => {
+        if (onProposalComplete) {
+          onProposalComplete();
+        }
+      },
     });
 
     // Expose for verification and timeline inspection
@@ -211,6 +225,11 @@ function LoveStoryPoints({ autoPlay = true, isMobile = false, isPortrait = false
 
     tl.to(animState, { keyframes });
 
+    // Gradually fade soundtrack to silence during particle dissolution
+    tl.call(() => {
+      soundtrack.fadeOut(AUDIO_CONFIG.fadeDuration);
+    }, null, dissolveStartTime);
+
     if (autoPlay === false) {
       tl.pause(0);
     }
@@ -263,7 +282,12 @@ function LoveStoryPoints({ autoPlay = true, isMobile = false, isPortrait = false
   );
 }
 
-export function LoveStoryExperience({ autoPlay = true, isMobile = false, isPortrait = false }) {
+export function LoveStoryExperience({
+  autoPlay = true,
+  isMobile = false,
+  isPortrait = false,
+  onProposalComplete,
+}) {
   return (
     <div className="w-full h-full bg-[#000000] overflow-hidden select-none relative">
       <Canvas
@@ -279,7 +303,12 @@ export function LoveStoryExperience({ autoPlay = true, isMobile = false, isPortr
       >
         <color attach="background" args={['#000000']} />
         <LoveStoryRendererHook isMobile={isMobile} isPortrait={isPortrait} />
-        <LoveStoryPoints autoPlay={autoPlay} isMobile={isMobile} isPortrait={isPortrait} />
+        <LoveStoryPoints
+          autoPlay={autoPlay}
+          isMobile={isMobile}
+          isPortrait={isPortrait}
+          onProposalComplete={onProposalComplete}
+        />
       </Canvas>
     </div>
   );
