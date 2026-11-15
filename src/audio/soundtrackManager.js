@@ -220,6 +220,59 @@ class SoundtrackManager {
   }
 
   /**
+   * Smoothly transitions the soundtrack to an intimate reading volume during the Love Letter.
+   * Does NOT stop or restart playback.
+   */
+  setReadingVolume(targetVol = 0.35, duration = 2.5) {
+    const audio = this.getAudio();
+    if (!audio || !this.isPlaying) return;
+    if (this.fadeTween) {
+      this.fadeTween.kill();
+      this.fadeTween = null;
+    }
+    if (this.volumeTween) {
+      this.volumeTween.kill();
+      this.volumeTween = null;
+    }
+
+    const volState = { vol: this.currentVolume };
+    this.volumeTween = gsap.to(volState, {
+      vol: targetVol,
+      duration: duration,
+      ease: 'power1.out',
+      onUpdate: () => {
+        this.setVolume(volState.vol);
+      },
+    });
+  }
+
+  /**
+   * Gently swells volume for the emotional proposal climax (Final Rose & Question).
+   */
+  setClimaxVolume(targetVol = 0.55, duration = 3.0) {
+    const audio = this.getAudio();
+    if (!audio || !this.isPlaying) return;
+    if (this.fadeTween) {
+      this.fadeTween.kill();
+      this.fadeTween = null;
+    }
+    if (this.volumeTween) {
+      this.volumeTween.kill();
+      this.volumeTween = null;
+    }
+
+    const volState = { vol: this.currentVolume };
+    this.volumeTween = gsap.to(volState, {
+      vol: targetVol,
+      duration: duration,
+      ease: 'power1.inOut',
+      onUpdate: () => {
+        this.setVolume(volState.vol);
+      },
+    });
+  }
+
+  /**
    * Gently fade out only after the entire final romantic ending has completed.
    */
   fadeAfterEnding(duration = AUDIO_CONFIG.finalFadeDuration) {

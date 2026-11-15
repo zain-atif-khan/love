@@ -4,6 +4,7 @@ uniform float uRevealProgress;
 uniform float uOfferProgress;
 uniform float uManOfferProgress;
 uniform float uWomanReachProgress;
+uniform float uWaveProgress;
 uniform float uDissolveProgress;
 uniform float uFreeze;
 uniform float uAlpha;
@@ -22,6 +23,7 @@ varying float vPartType;
 varying float vColorT;
 varying float vRandom;
 varying float vAlpha;
+varying float vWaveIntensity;
 
 // Simplex Noise 3D
 vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
@@ -133,7 +135,66 @@ void main() {
     pos.xy += breath;
   }
 
-  // 4. Scene Seven: Dissolution into thousands of floating particles
+  // 4. Two Consecutive Waves: Wave 1 (Leading) and Wave 2 (Following closely behind)
+  // Originates precisely at contact point [-0.033, 1.562, -0.005] and travels across full anatomy
+  float waveIntensity = 0.0;
+  if (uWaveProgress > 0.001) {
+    vec3 contactPt = vec3(-0.033, 1.562, -0.005);
+    float d = 0.0;
+    if (aPartType < 0.5) {
+      // 0: Rose petals - radiates from outer petal inwards to center bud
+      d = length(targetPose - contactPt) * 1.5;
+    } else if (aPartType < 1.5) {
+      // 1: Rose stem & leaves - travels down stem from flower
+      d = 0.18 + max(0.0, 1.55 - targetPose.y) * 1.2;
+    } else if (aPartType < 2.5) {
+      // 2: Man's hand cupping the stem
+      d = 0.35 + length(targetPose - vec3(-0.16, 1.22, 0.0)) * 1.5;
+    } else if (aPartType < 3.8) {
+      // 3: Man's arm, suit jacket, shoulder, torso, and kneeling legs
+      float armDist = length(targetPose - vec3(-0.35, 1.12, 0.0)) * 1.2;
+      float shoulderDist = 0.68 + length(targetPose - vec3(-0.71, 1.60, 0.0));
+      float torsoDist = 0.85 + length(targetPose - vec3(-0.82, 1.27, 0.0));
+      float legDist = 1.05 + max(0.0, 0.70 - targetPose.y) * 1.2;
+      d = 0.45 + min(armDist, min(shoulderDist, min(torsoDist, legDist)));
+    } else if (aPartType < 4.8) {
+      // 4: Woman's hand, arm, shoulder, bodice, hair, and cascading dress
+      float handDist = length(targetPose - contactPt) * 1.1;
+      float armDist = 0.25 + length(targetPose - vec3(0.35, 1.56, 0.0));
+      float shoulderDist = 0.60 + length(targetPose - vec3(0.52, 1.90, 0.0));
+      float bodiceDist = 0.55 + length(targetPose - vec3(0.53, 1.50, 0.0));
+      float gownDist = 0.75 + max(0.0, 1.00 - targetPose.y) * 0.95;
+      d = min(handDist, min(armDist, min(shoulderDist, min(bodiceDist, gownDist))));
+    } else {
+      // 5: Ambient aura particles
+      d = 0.6 + length(targetPose - contactPt) * 0.7;
+    }
+
+    // Wave 1: Leading pulse front
+    float waveFront1 = uWaveProgress * 2.7;
+    float dist1 = abs(waveFront1 - d);
+    float pulse1 = (dist1 < 0.34) ? exp(-dist1 * dist1 * 28.0) : 0.0;
+
+    // Wave 2: Following pulse front (offset by ~0.18 progress behind Wave 1)
+    float waveFront2 = max(0.0, (uWaveProgress - 0.18) * 2.7);
+    float dist2 = abs(waveFront2 - d);
+    float pulse2 = (waveFront2 > 0.01 && dist2 < 0.34) ? exp(-dist2 * dist2 * 28.0) * 0.88 : 0.0;
+
+    // Settle factor returning particles smoothly to original brightness
+    float settle = 1.0 - smoothstep(0.82, 1.0, uWaveProgress);
+    float combinedWaves = (pulse1 + pulse2) * settle;
+
+    // Initial concentrated blush-pink particle glow at contact point (t = 0 of contact)
+    float contactBurst = 0.0;
+    if (uWaveProgress < 0.32 && d < 0.28) {
+      contactBurst = exp(-d * d * 40.0) * sin(uWaveProgress / 0.32 * 3.14159) * 0.75;
+    }
+
+    waveIntensity = min(1.0, combinedWaves + contactBurst);
+  }
+  vWaveIntensity = waveIntensity;
+
+  // 5. Scene Ten: Dissolution into thousands of floating particles
   if (uDissolveProgress > 0.001) {
     vec3 curl = curlNoise(pos * 0.85 + vec3(effectiveTime * 0.2, aRandom * 4.0, effectiveTime * 0.1));
     float dist = pow(uDissolveProgress, 1.5);
@@ -150,11 +211,12 @@ void main() {
   vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
   gl_Position = projectionMatrix * mvPosition;
 
-  // Particle Point Sizing with subtle twinkle
+  // Particle Point Sizing with subtle twinkle and wave pulse boost
   float twinkle = (uFreeze > 0.5) ? 1.0 : (1.0 + 0.25 * sin(effectiveTime * 3.8 + aRandom * 6.28318));
   float baseScale = (aPartType < 0.5) ? 1.55 : 1.10; // Rose blossom slightly crisper
-  float pSize = aSize * baseScale * uPixelRatio * twinkle * (7.0 / -mvPosition.z);
-  gl_PointSize = clamp(pSize, 1.0, 3.2);
+  float waveSizeBoost = 1.0 + vWaveIntensity * 0.38;
+  float pSize = aSize * baseScale * uPixelRatio * twinkle * (7.0 / -mvPosition.z) * waveSizeBoost;
+  gl_PointSize = clamp(pSize, 1.0, 3.8);
 }
 `;
 
@@ -168,6 +230,7 @@ varying float vPartType;
 varying float vColorT;
 varying float vRandom;
 varying float vAlpha;
+varying float vWaveIntensity;
 
 void main() {
   if (vAlpha <= 0.005) discard;
@@ -253,8 +316,27 @@ void main() {
   }
 
   vec3 finalColor = color * twinkle;
+
+  // Emotional Two-Wave Highlights (Blush-Pink Transformation Pulses)
+  if (vWaveIntensity > 0.005) {
+    if (vPartType < 0.5) {
+      // Rose blossom: preserve deep crimson/ruby, add luminous blush-rose petal shimmer
+      vec3 waveBlush = vec3(1.0, 0.42, 0.58);
+      finalColor = mix(finalColor, finalColor * 1.35 + waveBlush * 0.35, vWaveIntensity);
+    } else if (vPartType < 1.5) {
+      // Stem: subtle ruby highlight
+      vec3 waveRuby = vec3(0.95, 0.28, 0.42);
+      finalColor = mix(finalColor, finalColor * 1.30 + waveRuby * 0.30, vWaveIntensity);
+    } else {
+      // Human figures & dress: ethereal brighter blush-pink glow that settles naturally
+      vec3 etherealBlush = vec3(1.0, 0.72, 0.85);
+      finalColor = mix(finalColor, etherealBlush, vWaveIntensity * 0.58);
+    }
+  }
+
   float alphaScale = (vPartType < 0.5) ? 0.55 : ((vPartType < 1.5) ? 0.35 : ((vPartType < 2.5) ? 0.18 : 0.115));
-  float alpha = core * vAlpha * uAlpha * alphaScale;
+  float alphaBoost = 1.0 + vWaveIntensity * 0.55;
+  float alpha = core * vAlpha * uAlpha * alphaScale * alphaBoost;
 
   gl_FragColor = vec4(finalColor, alpha);
 }

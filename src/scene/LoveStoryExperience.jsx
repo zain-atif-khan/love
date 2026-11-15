@@ -5,6 +5,7 @@ import gsap from 'gsap';
 import { loadLoveStoryData } from './loadLoveStory';
 import { loveStoryVertexShader, loveStoryFragmentShader } from './loveStoryShaders';
 import { soundtrack } from '../audio/soundtrackManager';
+import { heartbeat } from '../audio/heartbeatManager';
 import { AUDIO_CONFIG } from '../config/audioConfig';
 
 function LoveStoryRendererHook({ isMobile = false, isPortrait = false }) {
@@ -23,7 +24,6 @@ function LoveStoryRendererHook({ isMobile = false, isPortrait = false }) {
     } else if (isPortrait) {
       // Mobile Portrait: artwork is rotated 90 deg clockwise around (0.065, 1.10)
       // Rotated width along X is 2.20, rotated height along Y is 3.03
-      // Proportional contain-style scaling guarantees full scene visibility
       centerX = 0.065;
       centerY = 1.10;
       targetZ = Math.max(4.20, 3.20 / aspect);
@@ -100,6 +100,7 @@ function LoveStoryPoints({ autoPlay = true, isMobile = false, isPortrait = false
         uOfferProgress: { value: 0 },
         uManOfferProgress: { value: 0 },
         uWomanReachProgress: { value: 0 },
+        uWaveProgress: { value: 0 },
         uDissolveProgress: { value: 0 },
         uFreeze: { value: 0 },
         uAlpha: { value: 1.0 },
@@ -123,6 +124,7 @@ function LoveStoryPoints({ autoPlay = true, isMobile = false, isPortrait = false
       offer: 0,
       manOffer: 0,
       womanReach: 0,
+      wave: 0,
       dissolve: 0,
       freeze: 0,
       alpha: 1.0,
@@ -133,6 +135,7 @@ function LoveStoryPoints({ autoPlay = true, isMobile = false, isPortrait = false
       uniforms.uOfferProgress.value = animState.offer;
       uniforms.uManOfferProgress.value = animState.manOffer;
       uniforms.uWomanReachProgress.value = animState.womanReach;
+      uniforms.uWaveProgress.value = animState.wave;
       uniforms.uFreeze.value = animState.freeze;
       uniforms.uDissolveProgress.value = animState.dissolve;
       uniforms.uAlpha.value = animState.alpha;
@@ -155,9 +158,6 @@ function LoveStoryPoints({ autoPlay = true, isMobile = false, isPortrait = false
     window.__LOVE_STORY_UPDATE_UNIFORMS__ = updateAllUniforms;
 
     // Build the master animation through keyframes
-    // On mobile: skips the initial 1.5s blank screen because the user already waited
-    // exactly 2 seconds after the instruction disappeared; starts immediately!
-    // On desktop: retains the original 1.5s cosmic intro untouched.
     const keyframes = isMobile ? [
       // SCENE 2: The Red Rose Physically Assembles in Center (0.0s - 3.0s on mobile)
       { reveal: 0.18, duration: 3.0, ease: 'power2.out' },
@@ -179,7 +179,7 @@ function LoveStoryPoints({ autoPlay = true, isMobile = false, isPortrait = false
       { manOffer: 1.0, duration: 3.0, ease: 'power1.inOut' },
       // SCENE 8: Woman Gracefully Raises & Extends Reaching Arm to Rose (19.7s - 22.2s)
       { womanReach: 1.0, duration: 2.5, ease: 'power1.inOut' },
-      // SCENE 9: Moment of Contact — Pure Stillness Freeze (22.2s - 24.25s)
+      // SCENE 9: Moment of Contact — Pure Stillness Freeze + Emotional Particle Wave (22.2s - 24.25s)
       { freeze: 1.0, duration: 0.05 },
       { duration: 2.0 }, // 2 full seconds of frozen emotional awe
       // SCENE 10: Complete Dissolution into Swirling Stardust Vortex (24.25s - 29.5s)
@@ -188,7 +188,7 @@ function LoveStoryPoints({ autoPlay = true, isMobile = false, isPortrait = false
       { alpha: 0.0, duration: 1.2, ease: 'power2.in' },
       { duration: 2.0 } // Hold on pure black
     ] : [
-      // DESKTOP: Original keyframes untouched
+      // DESKTOP: Original keyframes
       // SCENE 1: Black screen with faint drifting cosmic stardust (0.0s - 1.5s)
       { reveal: 0.0, duration: 1.5 },
       // SCENE 2: The Red Rose Physically Assembles in Center (1.5s - 4.5s)
@@ -211,7 +211,7 @@ function LoveStoryPoints({ autoPlay = true, isMobile = false, isPortrait = false
       { manOffer: 1.0, duration: 3.0, ease: 'power1.inOut' },
       // SCENE 8: Woman Gracefully Raises & Extends Reaching Arm to Rose (21.2s - 23.7s)
       { womanReach: 1.0, duration: 2.5, ease: 'power1.inOut' },
-      // SCENE 9: Moment of Contact — Pure Stillness Freeze (23.7s - 25.75s)
+      // SCENE 9: Moment of Contact — Pure Stillness Freeze + Emotional Particle Wave (23.7s - 25.75s)
       { freeze: 1.0, duration: 0.05 },
       { duration: 2.0 }, // 2 full seconds of frozen emotional awe
       // SCENE 10: Complete Dissolution into Swirling Stardust Vortex (25.75s - 31.0s)
@@ -223,18 +223,43 @@ function LoveStoryPoints({ autoPlay = true, isMobile = false, isPortrait = false
 
     tl.to(animState, { keyframes });
 
+    // -------------------------------------------------------------
+    // FEATURE 2: Heartbeat Sound Trigger (attached to timeline)
+    // Triggers right before man begins offering the rose (Scene 6)
+    // -------------------------------------------------------------
+    const heartbeatTriggerTime = isMobile ? 15.5 : 17.0;
+    tl.call(() => {
+      heartbeat.play();
+    }, null, heartbeatTriggerTime);
+
+    // -------------------------------------------------------------
+    // FEATURE 3: Emotional Particle Wave at Fingertip Contact
+    // Triggers at exact contact moment (womanReach = 1.0)
+    // -------------------------------------------------------------
+    const contactMomentTime = isMobile ? 22.25 : 23.75;
+    tl.to(
+      animState,
+      {
+        wave: 1.0,
+        duration: 1.85,
+        ease: 'power1.inOut',
+      },
+      contactMomentTime
+    );
+
     if (autoPlay === false) {
       tl.pause(0);
     }
 
     return () => {
       tl.kill();
+      heartbeat.reset();
       delete window.__LOVE_STORY_TL__;
       delete window.__LOVE_STORY_STATE__;
       delete window.__LOVE_STORY_UNIFORMS__;
       delete window.__LOVE_STORY_UPDATE_UNIFORMS__;
     };
-  }, [geometry, material, autoPlay, isMobile]);
+  }, [geometry, material, autoPlay, isMobile, onProposalComplete]);
 
   useEffect(() => {
     if (window.__LOVE_STORY_TL__) {
@@ -253,6 +278,7 @@ function LoveStoryPoints({ autoPlay = true, isMobile = false, isPortrait = false
       materialRef.current.uniforms.uOfferProgress.value = window.__LOVE_STORY_STATE__.offer;
       materialRef.current.uniforms.uManOfferProgress.value = window.__LOVE_STORY_STATE__.manOffer;
       materialRef.current.uniforms.uWomanReachProgress.value = window.__LOVE_STORY_STATE__.womanReach;
+      materialRef.current.uniforms.uWaveProgress.value = window.__LOVE_STORY_STATE__.wave;
       materialRef.current.uniforms.uFreeze.value = window.__LOVE_STORY_STATE__.freeze;
       materialRef.current.uniforms.uDissolveProgress.value = window.__LOVE_STORY_STATE__.dissolve;
       materialRef.current.uniforms.uAlpha.value = window.__LOVE_STORY_STATE__.alpha;

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import gsap from 'gsap';
 import { soundtrack } from '../audio/soundtrackManager';
 import { AUDIO_CONFIG } from '../config/audioConfig';
@@ -22,21 +22,23 @@ const POEM_STANZAS = [
   ],
 ];
 
-export function RomanticDedication({ isMobile = false, isPortrait = false }) {
+export function RomanticDedication({
+  isMobile = false,
+  isPortrait = false,
+  onDedicationComplete,
+}) {
   const containerRef = useRef(null);
-
-  // Word Refs Map: 's0-l0-w0' -> element
   const wordsRef = useRef({});
-
-  // Heart Path Refs: heart0 -> path element
   const heartPathRefs = useRef([]);
+  const canvasRef = useRef(null);
+  const [isDissolving, setIsDissolving] = useState(false);
 
   useEffect(() => {
-    // 1. Prepare word elements for progressive handwritten appearance
+    // 1. Prepare word elements: strictly enforce hidden state from frame 0
     const wordEls = Object.values(wordsRef.current);
-    gsap.set(wordEls, { opacity: 0, y: 4, filter: 'blur(2px)' });
+    gsap.set(wordEls, { autoAlpha: 0, y: 4, filter: 'blur(2px)' });
 
-    // 2. Prepare hand-drawn SVG heart paths
+    // 2. Prepare hand-drawn SVG heart paths with length-based offsets
     heartPathRefs.current.forEach((pathEl) => {
       if (pathEl) {
         const length = pathEl.getTotalLength ? pathEl.getTotalLength() : 85;
@@ -48,10 +50,7 @@ export function RomanticDedication({ isMobile = false, isPortrait = false }) {
 
     const tl = gsap.timeline();
 
-    // -------------------------------------------------------------
     // Word-by-Word Reveal Sequence with Natural Human Rhythm
-    // -------------------------------------------------------------
-    // Schedule word reveal timestamps (in seconds)
     const wordTimings = [
       // Stanza 1, Line 1: "Some moments last a second,"
       { id: 's0-l0-w0', t: 0.00 }, // Some
@@ -68,11 +67,9 @@ export function RomanticDedication({ isMobile = false, isPortrait = false }) {
       { id: 's0-l1-w4', t: 3.90 }, // hearts
       { id: 's0-l1-w5', t: 4.40 }, // forever.
 
-      // Stanza Break Pause (emotional silence ~1.3s)
-
       // Stanza 2, Line 1: "And if I could choose one moment to live again,"
-      { id: 's1-l0-w0', t: 5.70 }, // And
-      { id: 's1-l0-w1', t: 6.08 }, // if
+      { id: 's1-l0-w0', t: 5.65 }, // And
+      { id: 's1-l0-w1', t: 6.02 }, // if
       { id: 's1-l0-w2', t: 6.38 }, // I
       { id: 's1-l0-w3', t: 6.80 }, // could
       { id: 's1-l0-w4', t: 7.25 }, // choose
@@ -92,14 +89,13 @@ export function RomanticDedication({ isMobile = false, isPortrait = false }) {
       { id: 's1-l1-w6', t: 13.15 }, // you.
     ];
 
-    // Animate each word individually into place
     wordTimings.forEach(({ id, t }) => {
       const el = wordsRef.current[id];
       if (el) {
         tl.to(
           el,
           {
-            opacity: 1,
+            autoAlpha: 1,
             y: 0,
             filter: 'blur(0px)',
             duration: 0.24,
@@ -110,20 +106,12 @@ export function RomanticDedication({ isMobile = false, isPortrait = false }) {
       }
     });
 
-    // -------------------------------------------------------------
-    // Hand-Drawn Red Line Hearts (Simultaneous with Writing)
-    // Each heart is visibly drawn progressively with a fine red line (2.2s - 2.5s)
-    // -------------------------------------------------------------
+    // Hand-Drawn Red Line Hearts
     const heartConfigs = [
-      // Heart 1: Upper-Left (begins shortly after first words appear)
       { index: 0, start: 1.20, duration: 2.3 },
-      // Heart 2: Upper-Right (starts as Stanza 1 completes)
       { index: 1, start: 4.40, duration: 2.3 },
-      // Heart 3: Mid-Left (starts as Stanza 2 begins)
       { index: 2, start: 7.60, duration: 2.4 },
-      // Heart 4: Mid-Right (draws while final line is being written)
       { index: 3, start: 10.80, duration: 2.3 },
-      // Heart 5: Lower-Right (final delicate flourish)
       { index: 4, start: 13.80, duration: 2.4 },
     ];
 
@@ -143,29 +131,25 @@ export function RomanticDedication({ isMobile = false, isPortrait = false }) {
     });
 
     // -------------------------------------------------------------
-    // Stillness Hold & Final Audio Fade
+    // Stillness Reading Hold -> Particle Dissolution Transition
     // -------------------------------------------------------------
-    // Keep complete dedication visible for ~7.5 seconds in quiet stillness
-    // End of animations is ~16.2s -> hold until ~24.0s
-    const endingCompleteTime = 24.0;
+    // Keep complete dedication visible for comfortable reading hold (~7.0s after words finish)
+    const holdEndTime = 20.5;
 
-    // Gently fade the soundtrack to silence only after the ending has finished
+    // Start particle dissolution at holdEndTime
     tl.call(() => {
-      soundtrack.fadeAfterEnding(AUDIO_CONFIG.finalFadeDuration);
-    }, null, endingCompleteTime);
+      setIsDissolving(true);
+      // Seamlessly transition music to gentle reading volume for the Love Letter
+      soundtrack.setReadingVolume(0.35, 2.5);
+    }, null, holdEndTime);
 
-    // Subtle gentle breathing pulse on final composition
-    tl.to(
-      containerRef.current,
-      {
-        opacity: 0.95,
-        duration: 4.0,
-        repeat: -1,
-        yoyo: true,
-        ease: 'sine.inOut',
-      },
-      endingCompleteTime
-    );
+    // After particle dissolution (~2.8s) + black screen stillness (1.5s), transition to Extended Ending
+    const transitionTime = holdEndTime + 4.3;
+    tl.call(() => {
+      if (onDedicationComplete) {
+        onDedicationComplete();
+      }
+    }, null, transitionTime);
 
     window.__DEDICATION_TL__ = tl;
 
@@ -173,16 +157,136 @@ export function RomanticDedication({ isMobile = false, isPortrait = false }) {
       tl.kill();
       delete window.__DEDICATION_TL__;
     };
-  }, []);
+  }, [onDedicationComplete]);
+
+  // Particle Dissolution Engine: converts text and doodle hearts into thousands of upward drifting blush-pink particles
+  useEffect(() => {
+    if (!isDissolving) return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    ctx.scale(dpr, dpr);
+
+    // Create offscreen canvas to sample exact text layout
+    const offscreen = document.createElement('canvas');
+    offscreen.width = width;
+    offscreen.height = height;
+    const offCtx = offscreen.getContext('2d');
+    if (!offCtx) return;
+
+    const isSideways = isMobile && isPortrait;
+    const baseFontSize = isMobile ? (isPortrait ? 20 : 22) : 30;
+
+    offCtx.save();
+    if (isSideways) {
+      offCtx.translate(width / 2, height / 2);
+      offCtx.rotate(Math.PI / 2);
+      offCtx.translate(-width / 2, -height / 2);
+    }
+
+    offCtx.font = `italic 400 ${baseFontSize}px "Cormorant Garamond", Georgia, serif`;
+    offCtx.fillStyle = '#f498b0';
+    offCtx.textAlign = 'center';
+    offCtx.textBaseline = 'middle';
+
+    const cx = width / 2;
+    const cy = height / 2;
+    const lineSpacing = baseFontSize * 1.55;
+
+    offCtx.fillText("Some moments last a second,", cx, cy - lineSpacing * 1.9);
+    offCtx.fillText("but stay in our hearts forever.", cx, cy - lineSpacing * 0.9);
+    offCtx.fillText("And if I could choose one moment to live again,", cx, cy + lineSpacing * 0.5);
+    offCtx.fillText("I'd choose the moment I found you.", cx, cy + lineSpacing * 1.5);
+
+    offCtx.restore();
+
+    const imgData = offCtx.getImageData(0, 0, width, height);
+    const data = imgData.data;
+
+    const particles = [];
+    const step = isMobile ? 3 : 2;
+    for (let y = 0; y < height; y += step) {
+      for (let x = 0; x < width; x += step) {
+        const index = (y * width + x) * 4;
+        const alpha = data[index + 3];
+        if (alpha > 90) {
+          particles.push({
+            x,
+            y,
+            vx: (Math.random() - 0.5) * 0.5,
+            vy: -0.25 - Math.random() * 0.65, // gentle upward romantic drift
+            size: 0.85 + Math.random() * 1.25,
+            alpha: 1.0,
+            fadeSpeed: 0.009 + Math.random() * 0.012,
+            turbulence: Math.random() * 6.28,
+          });
+        }
+      }
+    }
+
+    let animId;
+    let startTime = performance.now();
+
+    const render = () => {
+      const elapsed = (performance.now() - startTime) / 1000;
+      ctx.clearRect(0, 0, width, height);
+
+      let aliveCount = 0;
+      particles.forEach((p) => {
+        if (p.alpha <= 0.01) return;
+        aliveCount++;
+
+        p.turbulence += 0.04;
+        p.x += p.vx + Math.sin(p.turbulence) * 0.4;
+        p.y += p.vy + Math.cos(p.turbulence) * 0.18;
+        p.alpha = Math.max(0, p.alpha - p.fadeSpeed);
+
+        ctx.fillStyle = `rgba(244, 152, 176, ${p.alpha * 0.95})`;
+        ctx.shadowColor = 'rgba(244, 152, 176, 0.40)';
+        ctx.shadowBlur = 4;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      if (aliveCount > 0 && elapsed < 3.2) {
+        animId = requestAnimationFrame(render);
+      } else {
+        ctx.clearRect(0, 0, width, height);
+      }
+    };
+
+    animId = requestAnimationFrame(render);
+
+    return () => {
+      cancelAnimationFrame(animId);
+    };
+  }, [isDissolving, isMobile, isPortrait]);
 
   const isSidewaysMode = isMobile && isPortrait;
 
   return (
     <div className="fixed inset-0 w-screen h-screen bg-[#000000] flex items-center justify-center select-none overflow-hidden z-50 m-0 p-0">
-      {/* Dedication Card Wrapper */}
+      {/* Particle Canvas for Text Dissolution into Stardust */}
+      <canvas
+        ref={canvasRef}
+        className="fixed inset-0 w-full h-full pointer-events-none z-50"
+      />
+
+      {/* Dedication Card Wrapper (dissolves to opacity 0 when particle animation begins) */}
       <div
         ref={containerRef}
-        className={`relative flex flex-col items-center justify-center text-center transition-all duration-500 ${
+        className={`relative flex flex-col items-center justify-center text-center transition-opacity duration-700 ${
+          isDissolving ? 'opacity-0 pointer-events-none' : 'opacity-100'
+        } ${
           isSidewaysMode
             ? 'rotate-90 origin-center w-[92vh] max-h-[85vw] px-4 py-6'
             : 'w-full max-w-4xl px-8 md:px-14 py-12'
@@ -195,21 +299,16 @@ export function RomanticDedication({ isMobile = false, isPortrait = false }) {
           textShadow: '0 0 28px rgba(244, 152, 176, 0.32)',
         }}
       >
-        {/* ========================================================= */}
-        {/* 5 HAND-DRAWN RED LINE HEARTS IN SURROUNDING EMPTY SPACES   */}
-        {/* Never overlapping text, visibly drawn one by one           */}
-        {/* ========================================================= */}
-
         {/* Heart 1: Upper-Left */}
         <div
           className="absolute pointer-events-none select-none"
           style={{
             top: isSidewaysMode ? '-22px' : '-18px',
             left: isSidewaysMode ? '16px' : '28px',
-            transform: 'rotate(-14deg) scale(0.95)',
+            transform: 'scale(1.05) rotate(-14deg)',
           }}
         >
-          <svg viewBox="0 0 32 32" width="30" height="30" className="overflow-visible">
+          <svg width="34" height="34" viewBox="0 0 32 32" className="overflow-visible">
             <path
               ref={(el) => (heartPathRefs.current[0] = el)}
               d={HEART_PATH_A}
@@ -218,9 +317,7 @@ export function RomanticDedication({ isMobile = false, isPortrait = false }) {
               strokeWidth="1.8"
               strokeLinecap="round"
               strokeLinejoin="round"
-              style={{
-                filter: 'drop-shadow(0 0 3px rgba(212, 4, 26, 0.45))',
-              }}
+              className="drop-shadow-[0_0_8px_rgba(212,4,26,0.65)]"
             />
           </svg>
         </div>
@@ -229,12 +326,12 @@ export function RomanticDedication({ isMobile = false, isPortrait = false }) {
         <div
           className="absolute pointer-events-none select-none"
           style={{
-            top: isSidewaysMode ? '-20px' : '-14px',
-            right: isSidewaysMode ? '18px' : '32px',
-            transform: 'rotate(16deg) scale(1.05)',
+            top: isSidewaysMode ? '-18px' : '-12px',
+            right: isSidewaysMode ? '22px' : '36px',
+            transform: 'scale(0.92) rotate(16deg)',
           }}
         >
-          <svg viewBox="0 0 32 32" width="32" height="32" className="overflow-visible">
+          <svg width="32" height="32" viewBox="0 0 32 32" className="overflow-visible">
             <path
               ref={(el) => (heartPathRefs.current[1] = el)}
               d={HEART_PATH_B}
@@ -243,23 +340,45 @@ export function RomanticDedication({ isMobile = false, isPortrait = false }) {
               strokeWidth="1.8"
               strokeLinecap="round"
               strokeLinejoin="round"
-              style={{
-                filter: 'drop-shadow(0 0 3px rgba(212, 4, 26, 0.45))',
-              }}
+              className="drop-shadow-[0_0_8px_rgba(212,4,26,0.65)]"
             />
           </svg>
         </div>
 
-        {/* Heart 3: Mid-Left Margin */}
+        {/* Stanza 1 */}
+        <div className="mb-6 md:mb-8 flex flex-col items-center">
+          {POEM_STANZAS[0].map((lineWords, lineIdx) => (
+            <div
+              key={`s0-l${lineIdx}`}
+              className="flex flex-wrap justify-center gap-x-[0.28em] my-1 leading-relaxed text-2xl sm:text-3xl md:text-4xl"
+            >
+              {lineWords.map((word, wordIdx) => {
+                const wordId = `s0-l0-w${wordIdx + (lineIdx === 1 ? 5 : 0)}`;
+                return (
+                  <span
+                    key={wordId}
+                    ref={(el) => (wordsRef.current[wordId] = el)}
+                    className="inline-block transition-transform opacity-0 invisible"
+                    style={{ opacity: 0, visibility: 'hidden' }}
+                  >
+                    {word}
+                  </span>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+
+        {/* Heart 3: Mid-Left */}
         <div
           className="absolute pointer-events-none select-none"
           style={{
             top: '46%',
-            left: isSidewaysMode ? '-16px' : '10px',
-            transform: 'rotate(-8deg) scale(0.85)',
+            left: isSidewaysMode ? '-12px' : '-14px',
+            transform: 'translateY(-50%) scale(0.88) rotate(-10deg)',
           }}
         >
-          <svg viewBox="0 0 32 32" width="28" height="28" className="overflow-visible">
+          <svg width="30" height="30" viewBox="0 0 32 32" className="overflow-visible">
             <path
               ref={(el) => (heartPathRefs.current[2] = el)}
               d={HEART_PATH_C}
@@ -268,23 +387,21 @@ export function RomanticDedication({ isMobile = false, isPortrait = false }) {
               strokeWidth="1.8"
               strokeLinecap="round"
               strokeLinejoin="round"
-              style={{
-                filter: 'drop-shadow(0 0 3px rgba(212, 4, 26, 0.45))',
-              }}
+              className="drop-shadow-[0_0_8px_rgba(212,4,26,0.65)]"
             />
           </svg>
         </div>
 
-        {/* Heart 4: Mid-Right Margin */}
+        {/* Heart 4: Mid-Right */}
         <div
           className="absolute pointer-events-none select-none"
           style={{
-            top: '56%',
-            right: isSidewaysMode ? '-14px' : '14px',
-            transform: 'rotate(12deg) scale(0.95)',
+            top: '52%',
+            right: isSidewaysMode ? '-10px' : '-12px',
+            transform: 'translateY(-50%) scale(0.95) rotate(12deg)',
           }}
         >
-          <svg viewBox="0 0 32 32" width="30" height="30" className="overflow-visible">
+          <svg width="32" height="32" viewBox="0 0 32 32" className="overflow-visible">
             <path
               ref={(el) => (heartPathRefs.current[3] = el)}
               d={HEART_PATH_A}
@@ -293,24 +410,45 @@ export function RomanticDedication({ isMobile = false, isPortrait = false }) {
               strokeWidth="1.8"
               strokeLinecap="round"
               strokeLinejoin="round"
-              style={{
-                filter: 'drop-shadow(0 0 3px rgba(212, 4, 26, 0.45))',
-              }}
+              className="drop-shadow-[0_0_8px_rgba(212,4,26,0.65)]"
             />
           </svg>
         </div>
 
-        {/* Heart 5: Lower Margin */}
+        {/* Stanza 2 */}
+        <div className="flex flex-col items-center">
+          {POEM_STANZAS[1].map((lineWords, lineIdx) => (
+            <div
+              key={`s1-l${lineIdx}`}
+              className="flex flex-wrap justify-center gap-x-[0.28em] my-1 leading-relaxed text-2xl sm:text-3xl md:text-4xl"
+            >
+              {lineWords.map((word, wordIdx) => {
+                const wordId = `s1-l${lineIdx}-w${wordIdx}`;
+                return (
+                  <span
+                    key={wordId}
+                    ref={(el) => (wordsRef.current[wordId] = el)}
+                    className="inline-block transition-transform opacity-0 invisible"
+                    style={{ opacity: 0, visibility: 'hidden' }}
+                  >
+                    {word}
+                  </span>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+
+        {/* Heart 5: Lower-Right */}
         <div
           className="absolute pointer-events-none select-none"
           style={{
-            bottom: isSidewaysMode ? '-35px' : '-22px',
-            left: isSidewaysMode ? '80px' : 'auto',
-            right: isSidewaysMode ? 'auto' : '64px',
-            transform: 'rotate(-6deg) scale(1.0)',
+            bottom: isSidewaysMode ? '-22px' : '-18px',
+            right: isSidewaysMode ? '24px' : '42px',
+            transform: 'scale(1.08) rotate(18deg)',
           }}
         >
-          <svg viewBox="0 0 32 32" width="32" height="32" className="overflow-visible">
+          <svg width="36" height="36" viewBox="0 0 32 32" className="overflow-visible">
             <path
               ref={(el) => (heartPathRefs.current[4] = el)}
               d={HEART_PATH_B}
@@ -319,77 +457,9 @@ export function RomanticDedication({ isMobile = false, isPortrait = false }) {
               strokeWidth="1.8"
               strokeLinecap="round"
               strokeLinejoin="round"
-              style={{
-                filter: 'drop-shadow(0 0 3px rgba(212, 4, 26, 0.45))',
-              }}
+              className="drop-shadow-[0_0_8px_rgba(212,4,26,0.65)]"
             />
           </svg>
-        </div>
-
-        {/* ========================================================= */}
-        {/* WORD-BY-WORD ROMANTIC DEDICATION MESSAGE                   */}
-        {/* ========================================================= */}
-
-        {/* Stanza 1 */}
-        <div className="mb-7 md:mb-11 relative z-10">
-          {POEM_STANZAS[0].map((lineWords, lineIdx) => (
-            <p
-              key={`s0-l${lineIdx}`}
-              className="whitespace-nowrap text-lg sm:text-xl md:text-3xl lg:text-4xl leading-relaxed md:leading-loose font-normal mb-2 md:mb-4"
-              style={{
-                fontSize: isSidewaysMode ? 'clamp(1.05rem, 2.9vh, 1.8rem)' : undefined,
-              }}
-            >
-              {lineWords.map((word, wordIdx) => {
-                const id = `s0-l${lineIdx}-w${wordIdx}`;
-                return (
-                  <span
-                    key={id}
-                    ref={(el) => (wordsRef.current[id] = el)}
-                    className="inline-block mr-[0.28em] last:mr-0"
-                  >
-                    {word}
-                  </span>
-                );
-              })}
-            </p>
-          ))}
-        </div>
-
-        {/* Stanza 2 */}
-        <div className="relative z-10">
-          {POEM_STANZAS[1].map((lineWords, lineIdx) => {
-            const isFinalLine = lineIdx === 1;
-            return (
-              <p
-                key={`s1-l${lineIdx}`}
-                className={`whitespace-nowrap text-lg sm:text-xl md:text-3xl lg:text-4xl leading-relaxed md:leading-loose ${
-                  isFinalLine
-                    ? 'font-medium text-[#ff9db6]'
-                    : 'font-normal mb-2 md:mb-4'
-                }`}
-                style={{
-                  fontSize: isSidewaysMode ? 'clamp(1.1rem, 3.1vh, 1.95rem)' : undefined,
-                  textShadow: isFinalLine
-                    ? '0 0 38px rgba(255, 157, 182, 0.50)'
-                    : undefined,
-                }}
-              >
-                {lineWords.map((word, wordIdx) => {
-                  const id = `s1-l${lineIdx}-w${wordIdx}`;
-                  return (
-                    <span
-                      key={id}
-                      ref={(el) => (wordsRef.current[id] = el)}
-                      className="inline-block mr-[0.28em] last:mr-0"
-                    >
-                      {word}
-                    </span>
-                  );
-                })}
-              </p>
-            );
-          })}
         </div>
       </div>
     </div>
