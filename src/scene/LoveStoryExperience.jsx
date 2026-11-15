@@ -139,8 +139,6 @@ function LoveStoryPoints({ autoPlay = true, isMobile = false, isPortrait = false
     };
     updateAllUniforms();
 
-    const dissolveStartTime = isMobile ? 24.25 : 25.75;
-
     const tl = gsap.timeline({
       onUpdate: updateAllUniforms,
       onComplete: () => {
@@ -224,11 +222,6 @@ function LoveStoryPoints({ autoPlay = true, isMobile = false, isPortrait = false
     ];
 
     tl.to(animState, { keyframes });
-
-    // Gradually fade soundtrack to silence during particle dissolution
-    tl.call(() => {
-      soundtrack.fadeOut(AUDIO_CONFIG.fadeDuration);
-    }, null, dissolveStartTime);
 
     if (autoPlay === false) {
       tl.pause(0);

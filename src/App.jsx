@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { LoveStoryExperience } from './scene/LoveStoryExperience';
 import { ParticleTextIntro } from './components/ParticleTextIntro';
 import { RomanticDedication } from './components/RomanticDedication';
+import { SoundUnlockPrompt } from './components/SoundUnlockPrompt';
 import { loadLoveStoryData } from './scene/loadLoveStory';
 
 /**
@@ -43,6 +44,12 @@ export default function App() {
       const portrait = checkIsPortrait();
       setIsMobile(mobile);
       setIsPortrait(portrait);
+
+      // Section 3: If on mobile during intro and user rotates into landscape,
+      // start the main proposal animation immediately!
+      if (mobile && !portrait && stage === 'INTRO') {
+        setStage('PROPOSAL');
+      }
     };
 
     window.addEventListener('resize', handleResize);
@@ -56,7 +63,7 @@ export default function App() {
       clearTimeout(t1);
       clearTimeout(t2);
     };
-  }, []);
+  }, [stage]);
 
   // Safety guard: ensure the transition to PROPOSAL happens without leaving a black screen
   useEffect(() => {
@@ -107,6 +114,9 @@ export default function App() {
       {stage === 'DEDICATION' && (
         <RomanticDedication isMobile={isMobile} isPortrait={isPortrait} />
       )}
+
+      {/* Minimal, unobtrusive unlock prompt shown ONLY if mobile browser blocks autoplay */}
+      <SoundUnlockPrompt isMobile={isMobile} isPortrait={isPortrait} />
     </main>
   );
 }

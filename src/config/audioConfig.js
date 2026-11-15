@@ -1,18 +1,18 @@
 /**
  * Configurable Soundtrack Configuration
- * Easily swap the soundtrack file by updating soundtrackSrc.
+ * Exact Song: Stephen Sanchez — Until I Found You
  */
 export const AUDIO_CONFIG = {
-  // Path to audio file in /public directory (e.g. '/soundtrack.mp3')
+  // Path to the exact uploaded audio file in /public directory
   soundtrackSrc: '/soundtrack.mp3',
 
-  // Master volume (0.0 to 1.0)
-  masterVolume: 0.85,
+  // Master listening volume (100% as requested)
+  masterVolume: 1.0,
 
-  // Duration (in seconds) to smoothly fade audio out during particle dissolution
-  fadeDuration: 3.8,
+  // Duration (in seconds) to gently fade audio out after final ending completes
+  finalFadeDuration: 4.0,
 
-  // Track info
-  title: 'I Think They Call This Love',
-  artist: 'Elliot James Reay',
+  // Song metadata
+  title: 'Until I Found You',
+  artist: 'Stephen Sanchez',
 };
