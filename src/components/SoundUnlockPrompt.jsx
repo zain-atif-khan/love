@@ -11,6 +11,19 @@ export function SoundUnlockPrompt({ isMobile = false, isPortrait = false }) {
     return unsubscribe;
   }, []);
 
+  useEffect(() => {
+    if (!blocked) return;
+    const unlockOnGesture = () => {
+      soundtrack.play();
+    };
+    window.addEventListener('click', unlockOnGesture, { capture: true, once: true });
+    window.addEventListener('touchstart', unlockOnGesture, { capture: true, once: true, passive: true });
+    return () => {
+      window.removeEventListener('click', unlockOnGesture, { capture: true });
+      window.removeEventListener('touchstart', unlockOnGesture, { capture: true });
+    };
+  }, [blocked]);
+
   if (!blocked) return null;
 
   const handleUnlock = () => {
@@ -22,14 +35,6 @@ export function SoundUnlockPrompt({ isMobile = false, isPortrait = false }) {
 
   return (
     <>
-      {/* Invisible full-screen tap interceptor so tapping ANYWHERE starts audio */}
-      <div
-        onClick={handleUnlock}
-        onTouchStart={handleUnlock}
-        className="fixed inset-0 z-40 cursor-pointer select-none bg-transparent"
-        style={{ touchAction: 'manipulation' }}
-      />
-
       {/* Discreet minimal pill floating at bottom-center (or rotated sideways in portrait) */}
       <div
         onClick={handleUnlock}

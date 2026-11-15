@@ -78,6 +78,56 @@ export function ExtendedEnding({
     };
   }, [isPinned]);
 
+  // Window wheel, keyboard, and touch event delegation
+  useEffect(() => {
+    const track = scrollTrackRef.current;
+    if (!track) return;
+
+    const handleWheel = (e) => {
+      // If pinned, lock scroll
+      if (isPinned || hasTriggeredFinaleRef.current) return;
+      // Native scroll handles normal wheel smoothly now that overlay layers are non-blocking.
+    };
+
+    const handleKeyDown = (e) => {
+      if (isPinned || hasTriggeredFinaleRef.current) return;
+      if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
+        track.scrollTop += (e.key === ' ' || e.key === 'PageDown') ? window.innerHeight * 0.75 : 80;
+      } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
+        track.scrollTop -= (e.key === 'PageUp') ? window.innerHeight * 0.75 : 80;
+      }
+    };
+
+    let touchStartY = 0;
+    const handleTouchStart = (e) => {
+      if (e.touches && e.touches.length > 0) {
+        touchStartY = e.touches[0].clientY;
+      }
+    };
+
+    const handleTouchMove = (e) => {
+      if (isPinned || hasTriggeredFinaleRef.current) return;
+      if (e.touches && e.touches.length > 0) {
+        const touchY = e.touches[0].clientY;
+        const delta = touchStartY - touchY;
+        touchStartY = touchY;
+        track.scrollTop += delta;
+      }
+    };
+
+    window.addEventListener('wheel', handleWheel, { passive: true });
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
+
+    return () => {
+      window.removeEventListener('wheel', handleWheel);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+    };
+  }, [isPinned]);
+
   // Master Function: Starts the Automatic Pinned Sequence
   // WAITING MESSAGE -> MESSAGE DISSOLVES -> PINNED COUNTDOWN (3, 2, 1, 0) -> UNPIN -> ROSE FORMATION
   const startAutomaticFinale = () => {
@@ -313,6 +363,13 @@ export function ExtendedEnding({
     window.__ROSE_CANVAS_OPACITY__ = roseCanvasOpacity;
     window.__FINALE_TIMELINE__ = finaleTimelineRef.current;
     window.__START_AUTOMATIC_FINALE__ = startAutomaticFinale;
+    window.__FINALE_DEBUG__ = {
+      waitTextOpacity,
+      sentenceWordIndex,
+      sentenceOpacity,
+      isDissolving,
+      countdownNum,
+    };
   });
 
   useEffect(() => {
@@ -352,8 +409,12 @@ export function ExtendedEnding({
       {/* Exact recreation of reference rose, pure black background                 */}
       {/* ========================================================================= */}
       <div
-        className="fixed inset-0 w-full h-full pointer-events-none z-10 transition-opacity duration-300"
-        style={{ opacity: roseCanvasOpacity }}
+        className="fixed inset-0 w-full h-full pointer-events-none z-10 transition-opacity duration-300 [&_*]:pointer-events-none"
+        style={{
+          opacity: roseCanvasOpacity,
+          visibility: roseCanvasOpacity > 0 ? 'visible' : 'hidden',
+          pointerEvents: 'none',
+        }}
       >
         <MasterRoseExperience
           formationProgress={roseFormationProgress}
@@ -363,92 +424,93 @@ export function ExtendedEnding({
       </div>
 
       {/* ========================================================================= */}
-      {/* PINNED OVERLAY FOR AUTOMATIC FINALE (COUNTDOWN & WAITING MESSAGE)        */}
-      {/* Pure black background, centered cinematic blush-pink typography           */}
+      {/* PINNED PURE BLACK OVERLAY FOR AUTOMATIC FINALE                           */}
+      {/* Active only during Waiting message & Countdown; unpins when rose starts   */}
       {/* ========================================================================= */}
+      {(finalePhase === 'WAITING' || finalePhase === 'DISSOLVING' || finalePhase === 'COUNTDOWN') && (
+        <div className="fixed inset-0 bg-[#000000] z-40 pointer-events-none select-none flex flex-col items-center justify-center">
+          {/* 1. WAITING MESSAGE OVERLAY */}
+          {(waitTextOpacity > 0.01 || sentenceOpacity > 0.01 || isDissolving) && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center">
+              {/* Stardust dissolution particles */}
+              {isDissolving && (
+                <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                  {stardustSparks.map((s) => (
+                    <span
+                      key={s.id}
+                      className="absolute left-1/2 top-1/2 rounded-full bg-[#f498b0] animate-pulse"
+                      style={{
+                        width: `${s.size}px`,
+                        height: `${s.size}px`,
+                        transform: `translate(${s.x + s.dx * 0.5}px, ${s.y + s.dy * 0.5}px)`,
+                        opacity: s.opacity,
+                        boxShadow: '0 0 10px rgba(244, 152, 176, 0.8)',
+                        transition: 'all 1.2s cubic-bezier(0.1, 0.8, 0.2, 1)',
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
 
-      {/* 1. WAITING MESSAGE OVERLAY */}
-      {(waitTextOpacity > 0.01 || sentenceOpacity > 0.01 || isDissolving) && (
-        <div className="fixed inset-0 flex flex-col items-center justify-center pointer-events-none z-30 select-none px-6 text-center">
-          {/* Stardust dissolution particles */}
-          {isDissolving && (
-            <div className="absolute inset-0 pointer-events-none overflow-hidden">
-              {stardustSparks.map((s) => (
-                <span
-                  key={s.id}
-                  className="absolute left-1/2 top-1/2 rounded-full bg-[#f498b0] animate-pulse"
-                  style={{
-                    width: `${s.size}px`,
-                    height: `${s.size}px`,
-                    transform: `translate(${s.x + s.dx * 0.5}px, ${s.y + s.dy * 0.5}px)`,
-                    opacity: s.opacity,
-                    boxShadow: '0 0 10px rgba(244, 152, 176, 0.8)',
-                    transition: 'all 1.2s cubic-bezier(0.1, 0.8, 0.2, 1)',
-                  }}
-                />
-              ))}
+              {/* "Wait..." */}
+              <h2
+                className="text-3xl sm:text-4xl md:text-5xl font-serif italic text-[#f498b0] mb-6 transition-all"
+                style={{
+                  fontFamily: "'Cormorant Garamond', Georgia, serif",
+                  opacity: waitTextOpacity,
+                  filter: `blur(${dissolveBlur}px)`,
+                  textShadow: '0 0 24px rgba(244, 152, 176, 0.45)',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                Wait...
+              </h2>
+
+              {/* "Because the beautiful things take time." Word-by-word reveal */}
+              <div
+                className="flex flex-wrap items-center justify-center gap-x-2 text-2xl sm:text-3xl md:text-4xl font-serif italic text-[#f498b0] max-w-2xl transition-all"
+                style={{
+                  fontFamily: "'Cormorant Garamond', Georgia, serif",
+                  opacity: sentenceOpacity,
+                  filter: `blur(${dissolveBlur}px)`,
+                  textShadow: '0 0 24px rgba(244, 152, 176, 0.40)',
+                  letterSpacing: '0.03em',
+                }}
+              >
+                {sentenceWordIndex > 0 &&
+                  WAITING_WORDS.slice(0, sentenceWordIndex).map((word, idx) => (
+                    <span
+                      key={idx}
+                      className="transition-all duration-300 transform inline-block"
+                      style={{
+                        opacity: 1,
+                        transform: 'translateY(0)',
+                        filter: 'blur(0px)',
+                      }}
+                    >
+                      {word}
+                    </span>
+                  ))}
+              </div>
             </div>
           )}
 
-          {/* "Wait..." */}
-          <h2
-            className="text-3xl sm:text-4xl md:text-5xl font-serif italic text-[#f498b0] mb-6 transition-all"
-            style={{
-              fontFamily: "'Cormorant Garamond', Georgia, serif",
-              opacity: waitTextOpacity,
-              filter: `blur(${dissolveBlur}px)`,
-              textShadow: '0 0 24px rgba(244, 152, 176, 0.45)',
-              letterSpacing: '0.04em',
-            }}
-          >
-            Wait...
-          </h2>
-
-          {/* "Because the beautiful things take time." Word-by-word reveal */}
-          <div
-            className="flex flex-wrap items-center justify-center gap-x-2 text-2xl sm:text-3xl md:text-4xl font-serif italic text-[#f498b0] max-w-2xl transition-all"
-            style={{
-              fontFamily: "'Cormorant Garamond', Georgia, serif",
-              opacity: sentenceOpacity,
-              filter: `blur(${dissolveBlur}px)`,
-              textShadow: '0 0 24px rgba(244, 152, 176, 0.40)',
-              letterSpacing: '0.03em',
-            }}
-          >
-            {WAITING_WORDS.map((word, idx) => {
-              const isWordVisible = idx < sentenceWordIndex;
-              return (
-                <span
-                  key={idx}
-                  className="transition-all duration-300 transform inline-block"
-                  style={{
-                    opacity: isWordVisible ? 1 : 0,
-                    transform: isWordVisible ? 'translateY(0)' : 'translateY(8px)',
-                    filter: isWordVisible ? 'blur(0px)' : 'blur(4px)',
-                  }}
-                >
-                  {word}
-                </span>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* 2. AUTOMATIC COUNTDOWN OVERLAY (3, 2, 1, 0) */}
-      {countdownNum !== null && (
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-30 select-none">
-          <span
-            className="text-7xl sm:text-8xl md:text-9xl font-serif italic text-[#f498b0] transition-all"
-            style={{
-              fontFamily: "'Cormorant Garamond', Georgia, serif",
-              opacity: countdownOpacity,
-              transform: `scale(${countdownScale})`,
-              textShadow: '0 0 40px rgba(244, 152, 176, 0.60)',
-            }}
-          >
-            {countdownNum}
-          </span>
+          {/* 2. AUTOMATIC COUNTDOWN OVERLAY (3, 2, 1, 0) */}
+          {countdownNum !== null && (
+            <div className="absolute inset-0 flex items-center justify-center select-none">
+              <span
+                className="text-7xl sm:text-8xl md:text-9xl font-serif italic text-[#f498b0] transition-all"
+                style={{
+                  fontFamily: "'Cormorant Garamond', Georgia, serif",
+                  opacity: countdownOpacity,
+                  transform: `scale(${countdownScale})`,
+                  textShadow: '0 0 40px rgba(244, 152, 176, 0.60)',
+                }}
+              >
+                {countdownNum}
+              </span>
+            </div>
+          )}
         </div>
       )}
 
@@ -457,13 +519,14 @@ export function ExtendedEnding({
       {/* ========================================================================= */}
       <div
         ref={scrollTrackRef}
-        className={`fixed inset-0 w-full h-full overflow-y-auto overflow-x-hidden z-20 ${
+        className={`fixed inset-0 w-full h-full overflow-y-scroll overflow-x-hidden z-20 touch-pan-y ${
           isPinned ? 'pointer-events-none' : 'pointer-events-auto'
         }`}
         style={{
           scrollbarWidth: 'none',
           msOverflowStyle: 'none',
           WebkitOverflowScrolling: 'touch',
+          touchAction: 'pan-y',
         }}
       >
         {/* SECTION 1: Initial Screen — Pure Black with "Scroll to reveal" (100vh) */}

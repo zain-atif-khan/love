@@ -111,7 +111,7 @@ export function MasterRoseExperience({
   isPortrait = false,
 }) {
   return (
-    <div className="fixed inset-0 w-full h-full pointer-events-none select-none overflow-hidden z-20">
+    <div className="fixed inset-0 w-full h-full pointer-events-none select-none overflow-hidden z-10 [&_*]:pointer-events-none">
       <Canvas
         camera={{ position: [0, 0, 3.8], fov: 45 }}
         dpr={[1, 2]}
@@ -121,7 +121,9 @@ export function MasterRoseExperience({
           preserveDrawingBuffer: true,
           powerPreference: 'high-performance',
         }}
-        className="w-full h-full"
+        className="w-full h-full pointer-events-none"
+        style={{ pointerEvents: 'none' }}
+        events={() => ({ enabled: false })}
       >
         <color attach="background" args={['#000000']} />
         <R3FRoseHook />

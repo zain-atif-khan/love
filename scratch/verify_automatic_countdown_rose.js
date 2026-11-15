@@ -120,7 +120,7 @@ async function run() {
   await evaluate(`(() => window.__EXTENDED_ENDING_SCROLL_TO__(0.44))()`);
   await sleep(600);
 
-  const oneMoreText = await evaluate(`(() => document.body.innerText)`);
+  const oneMoreText = await evaluate(`(() => document.body.innerText)()`);
   if (!oneMoreText.includes('One more scroll...')) {
     throw new Error('FAILURE: "One more scroll..." prompt not found!');
   }
@@ -143,7 +143,8 @@ async function run() {
 
   // STEP 1: "Wait..." appears first (seek to t = 0.8s)
   await evaluate(`(() => {
-    window.__FINALE_TIMELINE__.pause(0.8);
+    window.__FINALE_TIMELINE__.seek(0.8, false);
+    window.__FINALE_TIMELINE__.pause();
     return true;
   })()`);
   await sleep(300);
@@ -170,7 +171,8 @@ async function run() {
 
   // STEP 1B: Word-by-word reveal of second sentence (seek to t = 2.6s)
   await evaluate(`(() => {
-    window.__FINALE_TIMELINE__.pause(2.6);
+    window.__FINALE_TIMELINE__.seek(2.6, false);
+    window.__FINALE_TIMELINE__.pause();
     return true;
   })()`);
   await sleep(300);
@@ -179,10 +181,11 @@ async function run() {
 
   // STEP 1C: Complete waiting message hold (seek to t = 4.2s)
   await evaluate(`(() => {
-    window.__FINALE_TIMELINE__.pause(4.2);
+    window.__FINALE_TIMELINE__.seek(4.2, false);
+    window.__FINALE_TIMELINE__.pause();
     return true;
   })()`);
-  await sleep(300);
+  await sleep(400);
 
   const step1cCheck = await evaluate(`(() => {
     const text = document.body.innerText;
@@ -192,6 +195,7 @@ async function run() {
       hasBeautiful: text.includes('beautiful'),
       hasTime: text.includes('time.'),
       phase: window.__FINALE_PHASE__,
+      debug: window.__FINALE_DEBUG__,
     };
   })()`);
 
@@ -205,7 +209,8 @@ async function run() {
   // STEP 2: Message dissolves into blush-pink particles (seek to t = 5.6s)
   console.log('\n--- 3. VERIFYING MESSAGE PARTICLE DISSOLUTION ---');
   await evaluate(`(() => {
-    window.__FINALE_TIMELINE__.pause(5.6);
+    window.__FINALE_TIMELINE__.seek(5.6, false);
+    window.__FINALE_TIMELINE__.pause();
     return true;
   })()`);
   await sleep(300);
@@ -214,7 +219,8 @@ async function run() {
 
   // STEP 2B: Pure black screen hold before countdown (seek to t = 6.4s)
   await evaluate(`(() => {
-    window.__FINALE_TIMELINE__.pause(6.4);
+    window.__FINALE_TIMELINE__.seek(6.4, false);
+    window.__FINALE_TIMELINE__.pause();
     return true;
   })()`);
   await sleep(300);
@@ -239,28 +245,40 @@ async function run() {
   console.log('\n--- 4. VERIFYING AUTOMATIC PINNED COUNTDOWN (3, 2, 1, 0) ---');
 
   // 4a. Number 3 (seek to t = 7.3s)
-  await evaluate(`(() => window.__FINALE_TIMELINE__.pause(7.3))()`);
+  await evaluate(`(() => {
+    window.__FINALE_TIMELINE__.seek(7.3, false);
+    window.__FINALE_TIMELINE__.pause();
+  })()`);
   await sleep(300);
   const cd3 = await evaluate(`(() => window.__COUNTDOWN_NUMBER__)()`);
   if (cd3 !== 3) throw new Error(`FAILURE: Expected countdown 3, got ${cd3}`);
   await captureScreenshot('countdown_auto_3.png');
 
   // 4b. Number 2 (seek to t = 8.5s)
-  await evaluate(`(() => window.__FINALE_TIMELINE__.pause(8.5))()`);
+  await evaluate(`(() => {
+    window.__FINALE_TIMELINE__.seek(8.5, false);
+    window.__FINALE_TIMELINE__.pause();
+  })()`);
   await sleep(300);
   const cd2 = await evaluate(`(() => window.__COUNTDOWN_NUMBER__)()`);
   if (cd2 !== 2) throw new Error(`FAILURE: Expected countdown 2, got ${cd2}`);
   await captureScreenshot('countdown_auto_2.png');
 
   // 4c. Number 1 (seek to t = 9.7s)
-  await evaluate(`(() => window.__FINALE_TIMELINE__.pause(9.7))()`);
+  await evaluate(`(() => {
+    window.__FINALE_TIMELINE__.seek(9.7, false);
+    window.__FINALE_TIMELINE__.pause();
+  })()`);
   await sleep(300);
   const cd1 = await evaluate(`(() => window.__COUNTDOWN_NUMBER__)()`);
   if (cd1 !== 1) throw new Error(`FAILURE: Expected countdown 1, got ${cd1}`);
   await captureScreenshot('countdown_auto_1.png');
 
   // 4d. Number 0 (seek to t = 10.9s)
-  await evaluate(`(() => window.__FINALE_TIMELINE__.pause(10.9))()`);
+  await evaluate(`(() => {
+    window.__FINALE_TIMELINE__.seek(10.9, false);
+    window.__FINALE_TIMELINE__.pause();
+  })()`);
   await sleep(300);
   const cd0 = await evaluate(`(() => window.__COUNTDOWN_NUMBER__)()`);
   if (cd0 !== 0) throw new Error(`FAILURE: Expected countdown 0, got ${cd0}`);
@@ -271,7 +289,10 @@ async function run() {
   console.log('\n--- 5. VERIFYING AUTOMATIC ROSE FORMATION (NO SCROLL REQUIRED) ---');
 
   // Rose rising & forming (seek to t = 13.8s)
-  await evaluate(`(() => window.__FINALE_TIMELINE__.pause(13.8))()`);
+  await evaluate(`(() => {
+    window.__FINALE_TIMELINE__.seek(13.8, false);
+    window.__FINALE_TIMELINE__.pause();
+  })()`);
   await sleep(600);
 
   const risingDiag = await evaluate(`(() => ({
@@ -292,7 +313,10 @@ async function run() {
   console.log('PASS: Unpinned after zero; rose formation started automatically without any scroll!');
 
   // Fully assembled rose (seek to t = 16.5s)
-  await evaluate(`(() => window.__FINALE_TIMELINE__.pause(16.5))()`);
+  await evaluate(`(() => {
+    window.__FINALE_TIMELINE__.seek(16.5, false);
+    window.__FINALE_TIMELINE__.pause();
+  })()`);
   await sleep(1000);
 
   const fullRoseDiag = await evaluate(`(() => {
