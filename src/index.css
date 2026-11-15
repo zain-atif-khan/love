@@ -2,13 +2,22 @@
 
 @layer base {
   body {
-    background-color: #08050F;
+    background-color: #000000;
     color: #f1f1f1;
     font-family: 'JetBrains Mono', monospace;
     overflow: hidden;
     user-select: none;
     -webkit-font-smoothing: antialiased;
   }
+}
+
+html, body, #root {
+  background-color: #000000 !important;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
 }
 
 .font-serif-quote {
@@ -18,6 +27,28 @@
 
 .font-mono-code {
   font-family: 'JetBrains Mono', Consolas, Monaco, monospace;
+}
+
+.font-display-intro {
+  font-family: 'Cinzel', 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+@keyframes rotateSidewaysPhone {
+  0%, 16% {
+    transform: rotate(0deg);
+  }
+  42%, 76% {
+    transform: rotate(90deg);
+  }
+  94%, 100% {
+    transform: rotate(0deg);
+  }
+}
+
+.animate-rotate-sideways {
+  animation: rotateSidewaysPhone 3.6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  transform-origin: center center;
+  will-change: transform;
 }
 
 /* Custom subtle scrollbar for code editor */

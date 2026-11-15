@@ -5,11 +5,35 @@ import gsap from 'gsap';
 import { loadLoveStoryData } from './loadLoveStory';
 import { loveStoryVertexShader, loveStoryFragmentShader } from './loveStoryShaders';
 
-function LoveStoryRendererHook() {
-  const { gl, scene, camera } = useThree();
+function LoveStoryRendererHook({ isMobile = false, isPortrait = false }) {
+  const { gl, scene, camera, size } = useThree();
   useEffect(() => {
-    camera.position.set(0.04, 1.10, 3.18);
-    camera.lookAt(0.04, 1.10, 0.0);
+    const aspect = size.width / size.height;
+    let targetZ = 3.18;
+    let centerX = 0.04;
+    let centerY = 1.10;
+
+    if (!isMobile) {
+      // Desktop / Laptop: retain original framing untouched
+      if (aspect < 1.6) {
+        targetZ = Math.max(3.18, 4.0 / (0.8284 * aspect));
+      }
+    } else if (isPortrait) {
+      // Mobile Portrait: artwork is rotated 90 deg clockwise around (0.065, 1.10)
+      // Rotated width along X is 2.20, rotated height along Y is 3.03
+      // Proportional contain-style scaling guarantees full scene visibility
+      centerX = 0.065;
+      centerY = 1.10;
+      targetZ = Math.max(4.20, 3.20 / aspect);
+    } else {
+      // Mobile Native Landscape (innerWidth >= innerHeight)
+      centerX = 0.065;
+      centerY = 1.10;
+      targetZ = Math.max(3.18, 4.25 / (0.8284 * aspect));
+    }
+
+    camera.position.set(centerX, centerY, targetZ);
+    camera.lookAt(centerX, centerY, 0.0);
     camera.updateProjectionMatrix();
 
     window.__LOVE_STORY_RENDER__ = () => {
@@ -23,11 +47,11 @@ function LoveStoryRendererHook() {
       delete window.__LOVE_STORY_RENDER__;
       delete window.__LOVE_STORY_CANVAS__;
     };
-  }, [gl, scene, camera]);
+  }, [gl, scene, camera, size.width, size.height, isMobile, isPortrait]);
   return null;
 }
 
-function LoveStoryPoints() {
+function LoveStoryPoints({ autoPlay = true, isMobile = false, isPortrait = false }) {
   const pointsRef = useRef();
   const materialRef = useRef();
   const [data, setData] = useState(null);
@@ -119,40 +143,77 @@ function LoveStoryPoints() {
     window.__LOVE_STORY_UPDATE_UNIFORMS__ = updateAllUniforms;
 
     // Build the master animation through keyframes
-    tl.to(animState, {
-      keyframes: [
-        // SCENE 1: Black screen with faint drifting cosmic stardust (0.0s - 1.5s)
-        { reveal: 0.0, duration: 1.5 },
-        // SCENE 2: The Red Rose Physically Assembles in Center (1.5s - 4.5s)
-        { reveal: 0.18, duration: 3.0, ease: 'power2.out' },
-        // Pause to admire the glowing red rose (4.5s - 5.1s)
-        { duration: 0.6 },
-        // SCENE 3: The Hand Forms Wrapping Around Stem (5.1s - 7.3s)
-        { reveal: 0.33, duration: 2.2, ease: 'power2.inOut' },
-        // Pause (7.3s - 7.8s)
-        { duration: 0.5 },
-        // SCENE 4: The Kneeling Person Materializes on One Knee (7.8s - 11.6s)
-        { reveal: 0.59, duration: 3.8, ease: 'power2.inOut' },
-        // Pause (11.6s - 12.2s)
-        { duration: 0.6 },
-        // SCENE 5: The Standing Girl Materializes with Cascading Gown (12.2s - 16.2s)
-        { reveal: 0.96, duration: 4.0, ease: 'power2.inOut' },
-        // SCENE 6: Hold Complete Proposal Composition (16.2s - 18.2s)
-        { duration: 2.0 },
-        // SCENE 7: Man Slowly Raises & Extends Rose Arm Forward (18.2s - 21.2s)
-        { manOffer: 1.0, duration: 3.0, ease: 'power1.inOut' },
-        // SCENE 8: Woman Gracefully Raises & Extends Reaching Arm to Rose (21.2s - 23.7s)
-        { womanReach: 1.0, duration: 2.5, ease: 'power1.inOut' },
-        // SCENE 9: Moment of Contact — Pure Stillness Freeze (23.7s - 25.75s)
-        { freeze: 1.0, duration: 0.05 },
-        { duration: 2.0 }, // 2 full seconds of frozen emotional awe
-        // SCENE 10: Complete Dissolution into Swirling Stardust Vortex (25.75s - 31.0s)
-        { freeze: 0.0, duration: 0.05 },
-        { dissolve: 1.0, duration: 3.2, ease: 'power2.in' },
-        { alpha: 0.0, duration: 1.2, ease: 'power2.in' },
-        { duration: 2.0 } // Hold on pure black
-      ]
-    });
+    // On mobile: skips the initial 1.5s blank screen because the user already waited
+    // exactly 2 seconds after the instruction disappeared; starts immediately!
+    // On desktop: retains the original 1.5s cosmic intro untouched.
+    const keyframes = isMobile ? [
+      // SCENE 2: The Red Rose Physically Assembles in Center (0.0s - 3.0s on mobile)
+      { reveal: 0.18, duration: 3.0, ease: 'power2.out' },
+      // Pause to admire the glowing red rose (3.0s - 3.6s)
+      { duration: 0.6 },
+      // SCENE 3: The Hand Forms Wrapping Around Stem (3.6s - 5.8s)
+      { reveal: 0.33, duration: 2.2, ease: 'power2.inOut' },
+      // Pause (5.8s - 6.3s)
+      { duration: 0.5 },
+      // SCENE 4: The Kneeling Person Materializes on One Knee (6.3s - 10.1s)
+      { reveal: 0.59, duration: 3.8, ease: 'power2.inOut' },
+      // Pause (10.1s - 10.7s)
+      { duration: 0.6 },
+      // SCENE 5: The Standing Girl Materializes with Cascading Gown (10.7s - 14.7s)
+      { reveal: 0.96, duration: 4.0, ease: 'power2.inOut' },
+      // SCENE 6: Hold Complete Proposal Composition (14.7s - 16.7s)
+      { duration: 2.0 },
+      // SCENE 7: Man Slowly Raises & Extends Rose Arm Forward (16.7s - 19.7s)
+      { manOffer: 1.0, duration: 3.0, ease: 'power1.inOut' },
+      // SCENE 8: Woman Gracefully Raises & Extends Reaching Arm to Rose (19.7s - 22.2s)
+      { womanReach: 1.0, duration: 2.5, ease: 'power1.inOut' },
+      // SCENE 9: Moment of Contact — Pure Stillness Freeze (22.2s - 24.25s)
+      { freeze: 1.0, duration: 0.05 },
+      { duration: 2.0 }, // 2 full seconds of frozen emotional awe
+      // SCENE 10: Complete Dissolution into Swirling Stardust Vortex (24.25s - 29.5s)
+      { freeze: 0.0, duration: 0.05 },
+      { dissolve: 1.0, duration: 3.2, ease: 'power2.in' },
+      { alpha: 0.0, duration: 1.2, ease: 'power2.in' },
+      { duration: 2.0 } // Hold on pure black
+    ] : [
+      // DESKTOP: Original keyframes untouched
+      // SCENE 1: Black screen with faint drifting cosmic stardust (0.0s - 1.5s)
+      { reveal: 0.0, duration: 1.5 },
+      // SCENE 2: The Red Rose Physically Assembles in Center (1.5s - 4.5s)
+      { reveal: 0.18, duration: 3.0, ease: 'power2.out' },
+      // Pause to admire the glowing red rose (4.5s - 5.1s)
+      { duration: 0.6 },
+      // SCENE 3: The Hand Forms Wrapping Around Stem (5.1s - 7.3s)
+      { reveal: 0.33, duration: 2.2, ease: 'power2.inOut' },
+      // Pause (7.3s - 7.8s)
+      { duration: 0.5 },
+      // SCENE 4: The Kneeling Person Materializes on One Knee (7.8s - 11.6s)
+      { reveal: 0.59, duration: 3.8, ease: 'power2.inOut' },
+      // Pause (11.6s - 12.2s)
+      { duration: 0.6 },
+      // SCENE 5: The Standing Girl Materializes with Cascading Gown (12.2s - 16.2s)
+      { reveal: 0.96, duration: 4.0, ease: 'power2.inOut' },
+      // SCENE 6: Hold Complete Proposal Composition (16.2s - 18.2s)
+      { duration: 2.0 },
+      // SCENE 7: Man Slowly Raises & Extends Rose Arm Forward (18.2s - 21.2s)
+      { manOffer: 1.0, duration: 3.0, ease: 'power1.inOut' },
+      // SCENE 8: Woman Gracefully Raises & Extends Reaching Arm to Rose (21.2s - 23.7s)
+      { womanReach: 1.0, duration: 2.5, ease: 'power1.inOut' },
+      // SCENE 9: Moment of Contact — Pure Stillness Freeze (23.7s - 25.75s)
+      { freeze: 1.0, duration: 0.05 },
+      { duration: 2.0 }, // 2 full seconds of frozen emotional awe
+      // SCENE 10: Complete Dissolution into Swirling Stardust Vortex (25.75s - 31.0s)
+      { freeze: 0.0, duration: 0.05 },
+      { dissolve: 1.0, duration: 3.2, ease: 'power2.in' },
+      { alpha: 0.0, duration: 1.2, ease: 'power2.in' },
+      { duration: 2.0 } // Hold on pure black
+    ];
+
+    tl.to(animState, { keyframes });
+
+    if (autoPlay === false) {
+      tl.pause(0);
+    }
 
     return () => {
       tl.kill();
@@ -161,7 +222,17 @@ function LoveStoryPoints() {
       delete window.__LOVE_STORY_UNIFORMS__;
       delete window.__LOVE_STORY_UPDATE_UNIFORMS__;
     };
-  }, [geometry, material]);
+  }, [geometry, material, autoPlay, isMobile]);
+
+  useEffect(() => {
+    if (window.__LOVE_STORY_TL__) {
+      if (autoPlay) {
+        window.__LOVE_STORY_TL__.play();
+      } else {
+        window.__LOVE_STORY_TL__.pause(0);
+      }
+    }
+  }, [autoPlay]);
 
   useFrame(({ clock }) => {
     if (materialRef.current && window.__LOVE_STORY_STATE__) {
@@ -178,14 +249,23 @@ function LoveStoryPoints() {
 
   if (!geometry) return null;
 
+  const shouldRotateClockwise = isMobile && isPortrait;
+
   return (
-    <points ref={pointsRef} geometry={geometry} material={material} />
+    <group
+      position={[0.065, 1.10, 0]}
+      rotation={[0, 0, shouldRotateClockwise ? -Math.PI / 2 : 0]}
+    >
+      <group position={[-0.065, -1.10, 0]}>
+        <points ref={pointsRef} geometry={geometry} material={material} />
+      </group>
+    </group>
   );
 }
 
-export function LoveStoryExperience() {
+export function LoveStoryExperience({ autoPlay = true, isMobile = false, isPortrait = false }) {
   return (
-    <div className="w-screen h-screen bg-[#000000] overflow-hidden select-none relative">
+    <div className="w-full h-full bg-[#000000] overflow-hidden select-none relative">
       <Canvas
         camera={{ position: [0.04, 1.10, 3.18], fov: 45 }}
         dpr={[1, 2]}
@@ -198,8 +278,8 @@ export function LoveStoryExperience() {
         className="w-full h-full"
       >
         <color attach="background" args={['#000000']} />
-        <LoveStoryRendererHook />
-        <LoveStoryPoints />
+        <LoveStoryRendererHook isMobile={isMobile} isPortrait={isPortrait} />
+        <LoveStoryPoints autoPlay={autoPlay} isMobile={isMobile} isPortrait={isPortrait} />
       </Canvas>
     </div>
   );
